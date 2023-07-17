@@ -1,3 +1,5 @@
 /target/
 /Cargo.lock
 /.vscode/
+/src/ssl_h_openssl.rs
+/src/ssl_h_wolfssl.rs

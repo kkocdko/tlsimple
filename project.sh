@@ -20,7 +20,8 @@ if [ "$1" = "init-wolfssl" ]; then
   # ls -lh /home/kkocdko/misc/code/wolfssl-util/target/wolfssl/build/libwolfssl.so.35.5.1
   ./autogen.sh
   # --disable-filesystem
-  ./configure --disable-oldtls --disable-tlsv12 --enable-tls13 --disable-examples --disable-md5 --disable-aescbc --disable-sp --enable-alpn --disable-base64encode --disable-filesystem --disable-shared
+  ./configure --disable-shared --enable-opensslall
+  # ./configure --disable-oldtls --disable-tlsv12 --enable-tls13 --disable-examples --disable-md5 --disable-aescbc --disable-sp --enable-alpn --disable-base64encode --disable-filesystem --disable-shared --enable-opensslall
   make -j`nproc`
   ls -lh src/.libs/libwolfssl.a
   # ls -lh /home/kkocdko/misc/code/wolfssl-util/target/wolfssl/src/.libs/libwolfssl.so.35.5.1
@@ -55,8 +56,9 @@ if [ "$1" = "init-openssl" ]; then
 fi
 
 if [ "$1" = "run-openssl" ]; then
+  # ~/misc/apps/mold -run g++ src/openssl-main.cc -o target/main -I target/wolfssl -L target/wolfssl/src/.libs -lwolfssl -Wall -Wextra -g -fsanitize=address,undefined -fno-omit-frame-pointer
   ~/misc/apps/mold -run g++ src/openssl-main.cc -o target/main -I target/openssl/include -L target/openssl -lssl -lcrypto -Wall -Wextra -g -fsanitize=address,undefined -fno-omit-frame-pointer
-  target/main
+  target/main $2 $3
 fi
 
 # curl https://127.0.0.1:11111/

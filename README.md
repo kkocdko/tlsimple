@@ -29,6 +29,10 @@ https://dev.mysql.com/blog-archive/mysql-is-openssl-only-now/
 https://curl.se/docs/ssl-compared.html
 
 <!--
+cargo install bindgen-cli
+sudo dnf install clang-devel
+bindgen target/openssl/include/openssl/ssl.h -o src/ssl_h_openssl.rs -- -Itarget/openssl/include
+bindgen target/wolfssl/wolfssl/openssl/ssl.h -o src/ssl_h_wolfssl.rs -- -Itarget/wolfssl
 -->
 
 <!--
