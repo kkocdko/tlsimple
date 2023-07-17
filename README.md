@@ -1,4 +1,4 @@
-# wolfssl-util
+# tlsimple
 
 Some kkocdko's crazy ideas about TLS & HTTPS supports in async Rust.
 
@@ -10,6 +10,14 @@ Some kkocdko's crazy ideas about TLS & HTTPS supports in async Rust.
 
 - Single crate, less dependencies.
 
+wolfssl / openssl backend
+
+https://openwrt.org/releases/23.05/notes-23.05.0-rc2#switch_from_wolfssl_to_mbedtls_as_default
+
+https://dev.mysql.com/blog-archive/mysql-is-openssl-only-now/
+
+https://curl.se/docs/ssl-compared.html
+
 <!--
 https://stackoverflow.com/questions/50887018/cmake-generate-single-header-file
 https://github.com/rust-lang/cc-rs/issues/242
@@ -17,6 +25,9 @@ https://www.wolfssl.com/documentation/manuals/wolfssl/chapter02.html
 先尝试 bindgen 或者其他方案
 crate “cc”
 绑定代码？询问
+
+cargo install bindgen-cli
+
 -->
 
 <!--
