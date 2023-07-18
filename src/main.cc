@@ -191,6 +191,7 @@ int main(int argc, char **argv) {
 
       /* Create server SSL structure using newly accepted client socket */
       ssl = SSL_new(ctx);
+      // BIO_METHOD
       SSL_set_fd(ssl, client_skt);
 
       /* Wait for SSL connection from the client */

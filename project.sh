@@ -56,8 +56,8 @@ if [ "$1" = "init-openssl" ]; then
 fi
 
 if [ "$1" = "run-openssl" ]; then
-  # ~/misc/apps/mold -run g++ src/openssl-main.cc -o target/main -I target/wolfssl -L target/wolfssl/src/.libs -lwolfssl -Wall -Wextra -g -fsanitize=address,undefined -fno-omit-frame-pointer
-  ~/misc/apps/mold -run g++ src/openssl-main.cc -o target/main -I target/openssl/include -L target/openssl -lssl -lcrypto -Wall -Wextra -g -fsanitize=address,undefined -fno-omit-frame-pointer
+  # ~/misc/apps/mold -run g++ src/main.cc -o target/main -I target/wolfssl -L target/wolfssl/src/.libs -lwolfssl -Wall -Wextra -g -fsanitize=address,undefined -fno-omit-frame-pointer
+  ~/misc/apps/mold -run g++ src/main.cc -o target/main -I target/openssl/include -L target/openssl -lssl -lcrypto -Wall -Wextra -g -fsanitize=address,undefined -fno-omit-frame-pointer
   target/main $2 $3
 fi
 
