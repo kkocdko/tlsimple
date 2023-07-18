@@ -6,8 +6,8 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-#include <openssl/ssl.h>
 #include <openssl/err.h>
+#include <openssl/ssl.h>
 
 // #define OPENSSL_ALL
 // #include <wolfssl/openssl/ssl.h>
@@ -65,7 +65,7 @@ int create_socket(bool isServer) {
       exit(1);
     }
   }
-// ERRO
+  // ERRO
   return s;
 }
 

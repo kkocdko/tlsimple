@@ -4,15 +4,17 @@ Some kkocdko's crazy ideas about TLS & HTTPS supports in Rust.
 
 ## Goals
 
-- Provide `TlsStream` (for tokio) and `HttpsConnector` (for hyper) to use in async program.
+- [OpenSSL](https://github.com/openssl/openssl) / [wolfSSL](https://github.com/wolfSSL/wolfssl) backend.
 
-- Single crate, less dependencies. Build without install Perl, autoconf, automake etc.
+- Async support. Provide `TlsStream` (for tokio) and `HttpsConnector` (for hyper).
 
-- OpenSSL / wolfSSL backend.
+- Single crate, less dependencies.
+
+- Easy to build, without install Perl, autoconf, automake etc.
 
 ## Roadmap
 
-- [ ] Run OpenSSL demo
+- [x] Run OpenSSL demo
 - [ ] Bind OpenSSL to Rust
 - [ ] Benchmark
 - [ ] Use wolfSSL's OpenSSL Compatibility Layer
