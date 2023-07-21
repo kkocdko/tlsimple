@@ -4,7 +4,7 @@ Some kkocdko's crazy ideas about TLS & HTTPS supports in Rust.
 
 ## Goals
 
-- [OpenSSL](https://github.com/openssl/openssl) / [wolfSSL](https://github.com/wolfSSL/wolfssl) backend.
+- [OpenSSL](https://github.com/openssl/openssl) backend.
 
 - Async support. Provide `TlsStream` (for tokio) and `HttpsConnector` (for hyper).
 
@@ -15,10 +15,9 @@ Some kkocdko's crazy ideas about TLS & HTTPS supports in Rust.
 ## Roadmap
 
 - [x] Run OpenSSL demo
-- [ ] Bind OpenSSL to Rust
+- [ ] Use OpenSSL [Custom IO Abstraction Layer](https://www.wolfssl.com/documentation/manuals/wolfssl/chapter05.html#abstraction-layers)
+- [ ] Bind WolfSSL to Rust
 - [ ] Benchmark
-- [ ] Use wolfSSL's OpenSSL Compatibility Layer
-- [ ] Strip OpenSSL
 - [ ] Strip wolfSSL
 - [ ] Deploy
 - [ ] Publish & Announce
