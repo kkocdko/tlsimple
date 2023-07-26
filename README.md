@@ -16,7 +16,7 @@ Some kkocdko's crazy ideas about TLS & HTTPS supports in Rust.
 - [x] Run wolfSSL demo
 - [x] Run Mbed TLS demo
 - [x] Use Mbed TLS BIO
-- [ ] Try to figure out if Mbed TLS is easy to strip
+- [x] Try to figure out if Mbed TLS is easy to strip
 - [ ] Bind to Rust.
 - [ ] Bind to Rust with async.
 - [ ] Bench OpenSSL and Mbed TLS.

@@ -78,12 +78,13 @@ if [ "$1" = "init-mbedtls" ]; then
   mkdir mbedtls
   tar -xf mbedtls.tar.gz --strip-components 1 -C mbedtls
   cd mbedtls
-  make lib -j`nproc`
+  rm -rf `find tests -type f` programs visualc docs ChangeLog
+  # tar -cJf ../mbedtls.tar.xz -C .. mbedtls
+  CFLAGS="-I$(dirname $(realpath ..))/src -DMBEDTLS_CONFIG_FILE='<mbedtls_config_custom.h>'" make lib -j`nproc`
+  # https://stackoverflow.com/q/3821916
 fi
 
 if [ "$1" = "run-mbedtls" ]; then
-  # ~/misc/apps/mold -run g++ src/main.cc -o target/main -I target/wolfssl -L target/wolfssl/src/.libs -lwolfssl -Wall -Wextra -g -fsanitize=address,undefined -fno-omit-frame-pointer
-  # -g -fsanitize=address,undefined -fno-omit-frame-pointer
   ~/misc/apps/mold -run g++ src/main.cc -o target/main -I target/mbedtls/include -I target/mbedtls/tests/include -L target/mbedtls/library -lmbedtls -lmbedx509 -lmbedcrypto -Wall -Wextra -g -fsanitize=address,undefined -fno-omit-frame-pointer
   # strip --strip-all target/main
   ls -l target/main

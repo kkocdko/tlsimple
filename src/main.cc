@@ -6,9 +6,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-#include "mbedtls/ctr_drbg.h"
-#include "mbedtls/entropy.h"
-#include "mbedtls/ssl.h"
+#include "mbedtls.h"
 
 // clang-format off
 const int SERVER_PORT = 11111;
@@ -65,6 +63,8 @@ int main() {
   mbedtls_ssl_conf_ca_chain(&conf, srvcert.next, NULL);
   ret = mbedtls_ssl_conf_own_cert(&conf, &srvcert, &pkey);
   h(ret == 0, exit(1), "-0x%x", -ret);
+  const int ciphersuites[]{MBEDTLS_TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256, 0}; // only one ciphersuite
+  mbedtls_ssl_conf_ciphersuites(&conf, ciphersuites);
 
   mbedtls_ssl_context ssl;
   mbedtls_ssl_init(&ssl);
