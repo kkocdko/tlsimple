@@ -68,4 +68,27 @@ if [ "$1" = "run-openssl" ]; then
   target/main $2 $3
 fi
 
+
+if [ "$1" = "init-mbedtls" ]; then
+  cd target
+  if [ ! -e mbedtls.tar.gz ]; then
+    curl -o mbedtls.tar.gz -L https://github.com/Mbed-TLS/mbedtls/archive/refs/tags/v3.4.0.tar.gz
+  fi
+  rm -rf mbedtls
+  mkdir mbedtls
+  tar -xf mbedtls.tar.gz --strip-components 1 -C mbedtls
+  cd mbedtls
+  make lib -j`nproc`
+fi
+
+if [ "$1" = "run-mbedtls" ]; then
+  # ~/misc/apps/mold -run g++ src/main.cc -o target/main -I target/wolfssl -L target/wolfssl/src/.libs -lwolfssl -Wall -Wextra -g -fsanitize=address,undefined -fno-omit-frame-pointer
+  # -g -fsanitize=address,undefined -fno-omit-frame-pointer
+  ~/misc/apps/mold -run g++ src/main.cc -o target/main -I target/mbedtls/include -I target/mbedtls/tests/include -L target/mbedtls/library -lmbedtls -lmbedx509 -lmbedcrypto -Wall -Wextra -g -fsanitize=address,undefined -fno-omit-frame-pointer
+  # strip --strip-all target/main
+  ls -l target/main
+  target/main $2 $3
+fi
+
+
 # curl https://127.0.0.1:11111/
