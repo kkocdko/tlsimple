@@ -34,8 +34,7 @@ https://curl.se/docs/ssl-compared.html
 <!--
 cargo install bindgen-cli
 sudo dnf install clang-devel
-bindgen target/openssl/include/openssl/ssl.h -o src/ssl_h_openssl.rs -- -Itarget/openssl/include
-bindgen target/wolfssl/wolfssl/openssl/ssl.h -o src/ssl_h_wolfssl.rs -- -Itarget/wolfssl
+bindgen src/mbedtls.h -o src/mbedtls.h.rs -- -Itarget/mbedtls/include
 https://rust-lang.github.io/rust-bindgen/allowlisting.html
 -->
 
