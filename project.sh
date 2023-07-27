@@ -80,7 +80,7 @@ if [ "$1" = "init-mbedtls" ]; then
   cd mbedtls
   rm -rf `find tests -type f` programs visualc docs ChangeLog
   # tar -cJf ../mbedtls.tar.xz -C .. mbedtls
-  CFLAGS="-I$(dirname $(realpath ..))/src -DMBEDTLS_CONFIG_FILE='<mbedtls_config_custom.h>'" make lib -j`nproc`
+  CFLAGS="-I$(dirname $(realpath ..))/src -DMBEDTLS_CONFIG_FILE='<mbedtls_config_custom.h>' -fPIE -g -fsanitize=address -fno-omit-frame-pointer" make lib -j`nproc`
   # https://stackoverflow.com/q/3821916
 fi
 
@@ -91,5 +91,12 @@ if [ "$1" = "run-mbedtls" ]; then
   target/main $2 $3
 fi
 
+if [ "$1" = "run-rust" ]; then
+  export RUST_BACKTRACE=1
+  export RUSTFLAGS=-Zsanitizer=address
+  ~/misc/apps/mold -run cargo run
+  # cargo run
+  # https://doc.rust-lang.org/beta/unstable-book/compiler-flags/sanitizer.html
+fi
 
 # curl https://127.0.0.1:11111/
