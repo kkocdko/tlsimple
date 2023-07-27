@@ -12,18 +12,20 @@ Some kkocdko's crazy ideas about TLS & HTTPS supports in Rust.
 
 ## Roadmap
 
-- [x] Run OpenSSL demo
-- [x] Run wolfSSL demo
-- [x] Run Mbed TLS demo
-- [x] Use Mbed TLS BIO
-- [x] Try to figure out if Mbed TLS is easy to strip
+- [x] Run OpenSSL demo.
+- [x] Run wolfSSL demo.
+- [x] Run Mbed TLS demo.
+- [x] Use Mbed TLS BIO (I/O abstraction).
+- [x] Try to figure out if Mbed TLS is easy to strip.
+- [x] Build Mbed TLS with AddressSanitizer.
+- [x] Build Rust executable with AddressSanitizer.
 - [ ] Bind to Rust.
 - [ ] Bind to Rust with async.
 - [ ] Bench OpenSSL and Mbed TLS.
-- [ ] Strip
-- [ ] Deploy
-- [ ] Publish & Announce
-- [ ] Provide blocking API
+- [ ] Strip more.
+- [ ] Deploy.
+- [ ] Publish & Announce.
+- [ ] Provide blocking API.
 
 https://openwrt.org/releases/23.05/notes-23.05.0-rc2#switch_from_wolfssl_to_mbedtls_as_default
 
