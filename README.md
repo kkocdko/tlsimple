@@ -19,6 +19,7 @@ Some kkocdko's crazy ideas about TLS & HTTPS supports in Rust.
 - [x] Try to figure out if Mbed TLS is easy to strip.
 - [x] Build Mbed TLS with AddressSanitizer.
 - [x] Build Rust executable with AddressSanitizer.
+- [x] Rust binding prototype worked.
 - [ ] Bind to Rust.
 - [ ] Bind to Rust with async.
 - [ ] Bench OpenSSL and Mbed TLS.
