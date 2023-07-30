@@ -4,6 +4,8 @@ Some kkocdko's crazy ideas about TLS & HTTPS supports in Rust.
 
 ## Goals
 
+- In a word: Async Rust binding, use cc crate, needs only a c compiler, supports multi platform.
+
 - Async support. Provide `TlsStream` (for tokio) and `HttpsConnector` (for hyper).
 
 - Single crate, less dependencies.
@@ -20,13 +22,19 @@ Some kkocdko's crazy ideas about TLS & HTTPS supports in Rust.
 - [x] Build Mbed TLS with AddressSanitizer.
 - [x] Build Rust executable with AddressSanitizer.
 - [x] Rust binding prototype worked.
+- [x] Fully control the build progress, use only gcc / ar command.
+- [ ] Test if C demo works in Windows.
+- [ ] Compile with the Rust cc crate.
 - [ ] Bind to Rust.
 - [ ] Bind to Rust with async.
 - [ ] Bench OpenSSL and Mbed TLS.
 - [ ] Strip more.
+- [ ] Kernel TLS offload.
 - [ ] Deploy.
 - [ ] Publish & Announce.
 - [ ] Provide blocking API.
+
+https://github.com/Mbed-TLS/mbedtls/pull/5969
 
 https://openwrt.org/releases/23.05/notes-23.05.0-rc2#switch_from_wolfssl_to_mbedtls_as_default
 
@@ -42,6 +50,7 @@ https://rust-lang.github.io/rust-bindgen/allowlisting.html
 -->
 
 <!--
+curl -vvvk --tlsv1.3 https://127.0.0.1:11111
 https://stackoverflow.com/questions/50887018/cmake-generate-single-header-file
 https://github.com/rust-lang/cc-rs/issues/242
 https://www.wolfssl.com/documentation/manuals/wolfssl/chapter02.html

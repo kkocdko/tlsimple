@@ -63,8 +63,14 @@ int main() {
   mbedtls_ssl_conf_ca_chain(&conf, srvcert.next, NULL);
   ret = mbedtls_ssl_conf_own_cert(&conf, &srvcert, &pkey);
   h(ret == 0, exit(1), "-0x%x", -ret);
-  const int ciphersuites[]{MBEDTLS_TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256, 0}; // only one ciphersuite
-  mbedtls_ssl_conf_ciphersuites(&conf, ciphersuites);
+
+  // const int ciphersuites[]{MBEDTLS_TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256, 0}; // only one ciphersuite
+  // mbedtls_ssl_conf_ciphersuites(&conf, ciphersuites);
+
+  // mbedtls_ssl_conf_max_tls_version(&conf, MBEDTLS_SSL_VERSION_TLS1_3);
+  // mbedtls_ssl_conf_min_tls_version(&conf, MBEDTLS_SSL_VERSION_TLS1_3);
+  // const int ciphersuites[]{MBEDTLS_TLS1_3_AES_128_GCM_SHA256, 0}; // only one ciphersuite
+  // mbedtls_ssl_conf_ciphersuites(&conf, ciphersuites);
 
   mbedtls_ssl_context ssl;
   mbedtls_ssl_init(&ssl);
@@ -92,9 +98,11 @@ int main() {
 
     mbedtls_ssl_session_reset(&ssl);
     mbedtls_ssl_set_bio(&ssl, &connd, bio_send, bio_recv, NULL);
+    // mbedtls_ssl_conf_alpn_protocols(mbedtls_ssl_config *conf, const char **protos)
 
-    ret = mbedtls_ssl_handshake(&ssl);
-    h(ret == 0, exit(1), "-0x%x", -ret);
+    // this seems unnecessary?
+    // ret = mbedtls_ssl_handshake(&ssl);
+    // h(ret == 0, exit(1), "-0x%x", -ret);
 
     unsigned char buf[256]{};
 
@@ -117,7 +125,8 @@ int main() {
     // write http response
     *buf = {};
     strcat((char *)buf, "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n<pre>\nHello world!\n");
-    strcat((char *)buf, mbedtls_ssl_get_ciphersuite(&ssl));
+    auto cur_chipersuite = mbedtls_ssl_get_ciphersuite(&ssl);
+    strcat((char *)buf, cur_chipersuite == NULL ? "none" : cur_chipersuite);
     strcat((char *)buf, "\n</pre>\n");
     int buf_len = strlen((char *)buf);
     ret = 0;

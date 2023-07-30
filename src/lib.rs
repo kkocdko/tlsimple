@@ -215,6 +215,7 @@ impl<'a, S: Write> Write for TlsStream<'a, S> {
         self.stream.flush()
     }
 }
+// https://github.com/Mbed-TLS/mbedtls/issues/7722
 // https://github.com/sfackler/rust-openssl/blob/9784356/openssl/src/ssl/mod.rs#L3708
 pub fn run() {
     unsafe {
@@ -230,7 +231,7 @@ pub fn run() {
                 }
             };
             let mut tls_stream = TlsStream::new(&tls_config, &mut stream);
-            tls_stream.accept();
+            // tls_stream.accept();
             let mut buf = [0; 256];
             tls_stream.read(&mut buf).unwrap();
             println!("----- read\n{}-----", String::from_utf8_lossy(&buf));

@@ -68,27 +68,41 @@ if [ "$1" = "run-openssl" ]; then
   target/main $2 $3
 fi
 
+MBEDTLS_CFLAGS='-Wall -Wextra -g -fsanitize=address,undefined -fno-omit-frame-pointer'
+# MBEDTLS_CFLAGS='-Os -flto'
 
-if [ "$1" = "init-mbedtls" ]; then
-  cd target
-  if [ ! -e mbedtls.tar.gz ]; then
-    curl -o mbedtls.tar.gz -L https://github.com/Mbed-TLS/mbedtls/archive/refs/tags/v3.4.0.tar.gz
+if [ "$1" = "mbedtls" ]; then
+  if [ "$2" = "init" ]; then
+    cd target
+    if [ ! -e mbedtls.tar.gz ]; then
+      curl -o mbedtls.tar.gz -L https://github.com/Mbed-TLS/mbedtls/archive/refs/tags/v3.4.0.tar.gz
+      # curl -o mbedtls.tar.gz -L https://github.com/Mbed-TLS/mbedtls/archive/refs/heads/development.tar.gz
+    fi
+    rm -rf mbedtls
+    mkdir mbedtls
+    tar_prefix=`tar -tf mbedtls.tar.gz | head -n1 | sed -e 's/\///g'`
+    tar --strip-components 1 -xf mbedtls.tar.gz -C mbedtls $tar_prefix/include $tar_prefix/library
+    cd mbedtls
+    # tar -cJf ../mbedtls.tar.xz -C .. mbedtls
+    # ~/misc/apps/dua
+
+    cd library
+    list=`find -name '*.c' | grep -Ev 'base64|aria|camellia|ccm|chacha|des|dhm|ecjpake|hkdf|psa_|ssl_tls13_'`
+    echo $list
+    for n in $list; do
+      gcc -c $n -I../include -DMBEDTLS_CONFIG_FILE='<../../../src/mbedtls_config_custom.h>' -fPIE $MBEDTLS_CFLAGS &
+    done
+    wait
+    ar r libmbedtls.a *.o
+    find -name '*.o' -delete
+    # https://stackoverflow.com/q/3821916
   fi
-  rm -rf mbedtls
-  mkdir mbedtls
-  tar -xf mbedtls.tar.gz --strip-components 1 -C mbedtls
-  cd mbedtls
-  rm -rf `find tests -type f` programs visualc docs ChangeLog
-  # tar -cJf ../mbedtls.tar.xz -C .. mbedtls
-  CFLAGS="-I$(dirname $(realpath ..))/src -DMBEDTLS_CONFIG_FILE='<mbedtls_config_custom.h>' -fPIE -g -fsanitize=address -fno-omit-frame-pointer" make lib -j`nproc`
-  # https://stackoverflow.com/q/3821916
-fi
-
-if [ "$1" = "run-mbedtls" ]; then
-  ~/misc/apps/mold -run g++ src/main.cc -o target/main -I target/mbedtls/include -I target/mbedtls/tests/include -L target/mbedtls/library -lmbedtls -lmbedx509 -lmbedcrypto -Wall -Wextra -g -fsanitize=address,undefined -fno-omit-frame-pointer
-  # strip --strip-all target/main
-  ls -l target/main
-  target/main $2 $3
+  if [ "$2" = "run" ]; then
+    ~/misc/apps/mold -run g++ src/main.cc -o target/main -I target/mbedtls/include -L target/mbedtls/library -lmbedtls $MBEDTLS_CFLAGS
+    strip --strip-all target/main
+    ls -l target/main
+    target/main
+  fi
 fi
 
 if [ "$1" = "run-rust" ]; then
