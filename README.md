@@ -1,6 +1,6 @@
 # tlsimple
 
-Some kkocdko's crazy ideas about TLS & HTTPS supports in Rust.
+Simple and tiny TLS supports for Rust (Async FFI of Mbed TLS).
 
 ## Goals
 
@@ -23,6 +23,8 @@ Some kkocdko's crazy ideas about TLS & HTTPS supports in Rust.
 - [x] Build Rust executable with AddressSanitizer.
 - [x] Rust binding prototype worked.
 - [x] Fully control the build progress, use only gcc / ar command.
+- [ ] TLS 1.3.
+- [ ] Fix LeakSanitizer.
 - [ ] Test if C demo works in Windows.
 - [ ] Compile with the Rust cc crate.
 - [ ] Bind to Rust.

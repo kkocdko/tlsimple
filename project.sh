@@ -87,18 +87,18 @@ if [ "$1" = "mbedtls" ]; then
     # ~/misc/apps/dua
 
     cd library
-    list=`find -name '*.c' | grep -Ev 'base64|aria|camellia|ccm|chacha|des|dhm|ecjpake|hkdf|psa_|ssl_tls13_'`
+    list=`find -name '*.c' | grep -Ev 'base64|aria|camellia|ccm|chacha|poly1305|lmots|lms|des|dhm|ecjpake|cmac|threading|hkdf|md5|net_sockets|mps_|psa_|ssl_tls13_'`
     echo $list
     for n in $list; do
       gcc -c $n -I../include -DMBEDTLS_CONFIG_FILE='<../../../src/mbedtls_config_custom.h>' -fPIE $MBEDTLS_CFLAGS &
     done
     wait
-    ar r libmbedtls.a *.o
+    ar r libmbedtlsmono.a *.o
     find -name '*.o' -delete
     # https://stackoverflow.com/q/3821916
   fi
   if [ "$2" = "run" ]; then
-    ~/misc/apps/mold -run g++ src/main.cc -o target/main -I target/mbedtls/include -L target/mbedtls/library -lmbedtls $MBEDTLS_CFLAGS
+    ~/misc/apps/mold -run g++ src/main.cc -o target/main -I target/mbedtls/include -L target/mbedtls/library -lmbedtlsmono $MBEDTLS_CFLAGS
     strip --strip-all target/main
     ls -l target/main
     target/main

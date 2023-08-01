@@ -1,0 +1,262 @@
+   Compiling tlsimple v0.1.0 (/home/kkocdko/misc/code/tlsimple)
+warning: unused import: `std::env`
+ --> build.rs:1:5
+  |
+1 | use std::env;
+  |     ^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` on by default
+
+warning: unused import: `std::path::PathBuf`
+ --> build.rs:2:5
+  |
+2 | use std::path::PathBuf;
+  |     ^^^^^^^^^^^^^^^^^^
+
+warning: `tlsimple` (build script) generated 2 warnings
+warning: field `tls_config` is never read
+   --> src/lib.rs:110:5
+    |
+109 | struct TlsStream<'a, S> {
+    |        --------- field in this struct
+110 |     tls_config: &'a TlsConfig,
+    |     ^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: `tlsimple` (lib) generated 1 warning
+    Finished dev [unoptimized + debuginfo] target(s) in 0.65s
+     Running `target/debug/tlsimple`
+[src/lib.rs:266] socket_addr = 127.0.0.1:54574
+----- read
+GET / HTTP/1.1
+Host: 127.0.0.1:11111
+User-Agent: curl/8.0.1
+Accept: */*
+
+-----
+[src/lib.rs:266] socket_addr = 127.0.0.1:56832
+----- read
+GET / HTTP/1.1
+Host: 127.0.0.1:11111
+User-Agent: curl/8.0.1
+Accept: */*
+
+-----
+[src/lib.rs:266] socket_addr = 127.0.0.1:58310
+----- read
+GET https://127.0.0.1:11111/ HTTP/1.1
+host: 127.0.0.1
+
+-----
+[src/lib.rs:266] socket_addr = 127.0.0.1:58318
+----- read
+GET https://127.0.0.1:11111/ HTTP/1.1
+host: 127.0.0.1
+
+-----
+[src/lib.rs:266] socket_addr = 127.0.0.1:58332
+----- read
+GET https://127.0.0.1:11111/ HTTP/1.1
+host: 127.0.0.1
+
+-----
+[src/lib.rs:266] socket_addr = 127.0.0.1:58346
+----- read
+GET https://127.0.0.1:11111/ HTTP/1.1
+host: 127.0.0.1
+
+-----
+[src/lib.rs:266] socket_addr = 127.0.0.1:58350
+----- read
+GET https://127.0.0.1:11111/ HTTP/1.1
+host: 127.0.0.1
+
+-----
+[src/lib.rs:266] socket_addr = 127.0.0.1:58352
+----- read
+GET https://127.0.0.1:11111/ HTTP/1.1
+host: 127.0.0.1
+
+-----
+[src/lib.rs:266] socket_addr = 127.0.0.1:58360
+----- read
+GET https://127.0.0.1:11111/ HTTP/1.1
+host: 127.0.0.1
+
+-----
+[src/lib.rs:266] socket_addr = 127.0.0.1:58366
+----- read
+GET https://127.0.0.1:11111/ HTTP/1.1
+host: 127.0.0.1
+
+-----
+[src/lib.rs:266] socket_addr = 127.0.0.1:58382
+----- read
+GET https://127.0.0.1:11111/ HTTP/1.1
+host: 127.0.0.1
+
+-----
+[src/lib.rs:266] socket_addr = 127.0.0.1:58394
+----- read
+GET https://127.0.0.1:11111/ HTTP/1.1
+host: 127.0.0.1
+
+-----
+[src/lib.rs:266] socket_addr = 127.0.0.1:58400
+----- read
+GET https://127.0.0.1:11111/ HTTP/1.1
+host: 127.0.0.1
+
+-----
+[src/lib.rs:266] socket_addr = 127.0.0.1:58406
+----- read
+GET https://127.0.0.1:11111/ HTTP/1.1
+host: 127.0.0.1
+
+-----
+[src/lib.rs:266] socket_addr = 127.0.0.1:58420
+----- read
+GET https://127.0.0.1:11111/ HTTP/1.1
+host: 127.0.0.1
+
+-----
+[src/lib.rs:266] socket_addr = 127.0.0.1:58426
+----- read
+GET https://127.0.0.1:11111/ HTTP/1.1
+host: 127.0.0.1
+
+-----
+[src/lib.rs:266] socket_addr = 127.0.0.1:58440
+----- read
+GET https://127.0.0.1:11111/ HTTP/1.1
+host: 127.0.0.1
+
+-----
+[src/lib.rs:266] socket_addr = 127.0.0.1:58446
+[src/lib.rs:130] e = Os {
+    code: 32,
+    kind: BrokenPipe,
+    message: "Broken pipe",
+}
+thread '<unnamed>' panicked at 'assertion failed: `(left == right)`
+  left: `-1`,
+ right: `0`', src/lib.rs:177:13
+stack backtrace:
+   0: rust_begin_unwind
+             at /rustc/8ede3aae28fe6e4d52b38157d7bfe0d3bceef225/library/std/src/panicking.rs:593:5
+   1: core::panicking::panic_fmt
+             at /rustc/8ede3aae28fe6e4d52b38157d7bfe0d3bceef225/library/core/src/panicking.rs:67:14
+   2: core::panicking::assert_failed_inner
+   3: core::panicking::assert_failed
+             at /rustc/8ede3aae28fe6e4d52b38157d7bfe0d3bceef225/library/core/src/panicking.rs:228:5
+   4: tlsimple::TlsStream<S>::accept
+             at ./src/lib.rs:177:13
+   5: tlsimple::run::{{closure}}
+             at ./src/lib.rs:268:17
+note: Some details are omitted, run with `RUST_BACKTRACE=full` for a verbose backtrace.
+[src/lib.rs:266] socket_addr = 127.0.0.1:56386
+----- read
+GET https://127.0.0.1:11111/ HTTP/1.1
+host: 127.0.0.1
+
+-----
+[src/lib.rs:266] socket_addr = 127.0.0.1:56396
+----- read
+GET https://127.0.0.1:11111/ HTTP/1.1
+host: 127.0.0.1
+
+-----
+[src/lib.rs:266] socket_addr = 127.0.0.1:56408
+----- read
+GET https://127.0.0.1:11111/ HTTP/1.1
+host: 127.0.0.1
+
+-----
+[src/lib.rs:266] socket_addr = 127.0.0.1:56410
+----- read
+GET https://127.0.0.1:11111/ HTTP/1.1
+host: 127.0.0.1
+
+-----
+[src/lib.rs:266] socket_addr = 127.0.0.1:56416
+----- read
+GET https://127.0.0.1:11111/ HTTP/1.1
+host: 127.0.0.1
+
+-----
+[src/lib.rs:266] socket_addr = 127.0.0.1:56418
+----- read
+GET https://127.0.0.1:11111/ HTTP/1.1
+host: 127.0.0.1
+
+-----
+[src/lib.rs:266] socket_addr = 127.0.0.1:56420
+----- read
+GET https://127.0.0.1:11111/ HTTP/1.1
+host: 127.0.0.1
+
+-----
+[src/lib.rs:266] socket_addr = 127.0.0.1:56424
+----- read
+GET https://127.0.0.1:11111/ HTTP/1.1
+host: 127.0.0.1
+
+-----
+[src/lib.rs:266] socket_addr = 127.0.0.1:56430
+----- read
+GET https://127.0.0.1:11111/ HTTP/1.1
+host: 127.0.0.1
+
+-----
+[src/lib.rs:266] socket_addr = 127.0.0.1:56446
+----- read
+GET https://127.0.0.1:11111/ HTTP/1.1
+host: 127.0.0.1
+
+-----
+[src/lib.rs:266] socket_addr = 127.0.0.1:56458
+----- read
+GET https://127.0.0.1:11111/ HTTP/1.1
+host: 127.0.0.1
+
+-----
+[src/lib.rs:266] socket_addr = 127.0.0.1:56460
+----- read
+GET https://127.0.0.1:11111/ HTTP/1.1
+host: 127.0.0.1
+
+-----
+[src/lib.rs:266] socket_addr = 127.0.0.1:56470
+----- read
+GET https://127.0.0.1:11111/ HTTP/1.1
+host: 127.0.0.1
+
+-----
+[src/lib.rs:266] socket_addr = 127.0.0.1:56478
+----- read
+GET https://127.0.0.1:11111/ HTTP/1.1
+host: 127.0.0.1
+
+-----
+[src/lib.rs:266] socket_addr = 127.0.0.1:56490
+----- read
+GET https://127.0.0.1:11111/ HTTP/1.1
+host: 127.0.0.1
+
+-----
+[src/lib.rs:266] socket_addr = 127.0.0.1:56494
+[src/lib.rs:214] ret = 0
+thread '<unnamed>' panicked at 'called `Result::unwrap()` on an `Err` value: Custom { kind: Other, error: "other error" }', src/lib.rs:272:53
+stack backtrace:
+   0: rust_begin_unwind
+             at /rustc/8ede3aae28fe6e4d52b38157d7bfe0d3bceef225/library/std/src/panicking.rs:593:5
+   1: core::panicking::panic_fmt
+             at /rustc/8ede3aae28fe6e4d52b38157d7bfe0d3bceef225/library/core/src/panicking.rs:67:14
+   2: core::result::unwrap_failed
+             at /rustc/8ede3aae28fe6e4d52b38157d7bfe0d3bceef225/library/core/src/result.rs:1651:5
+   3: core::result::Result<T,E>::unwrap
+             at /rustc/8ede3aae28fe6e4d52b38157d7bfe0d3bceef225/library/core/src/result.rs:1076:23
+   4: tlsimple::run::{{closure}}
+             at ./src/lib.rs:272:27
+note: Some details are omitted, run with `RUST_BACKTRACE=full` for a verbose backtrace.

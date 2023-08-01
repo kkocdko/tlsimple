@@ -124,10 +124,11 @@ int main() {
 
     // write http response
     *buf = {};
-    strcat((char *)buf, "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n<pre>\nHello world!\n");
+    strcat((char *)buf, "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\n");
+    strcat((char *)buf, "Hello world! ciphersuite = ");
     auto cur_chipersuite = mbedtls_ssl_get_ciphersuite(&ssl);
     strcat((char *)buf, cur_chipersuite == NULL ? "none" : cur_chipersuite);
-    strcat((char *)buf, "\n</pre>\n");
+    strcat((char *)buf, "\n");
     int buf_len = strlen((char *)buf);
     ret = 0;
     do {
