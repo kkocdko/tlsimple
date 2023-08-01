@@ -21,7 +21,7 @@ struct TlsConfig {
     conf: mbedtls_ssl_config,
 }
 
-// is this dangerous?
+// is this dangerous? I think if we always use TlsConfig::new which returns Pin<Box> will be fine
 unsafe impl Sync for TlsConfig {}
 unsafe impl Send for TlsConfig {}
 
@@ -128,8 +128,7 @@ impl<'a, S: Read + Write> TlsStream<'a, S> {
             Ok(n) => n as _,
             Err(e) => {
                 dbg!(e);
-                // MBEDTLS_ERR_SSL_INTERNAL_ERROR
-                -1
+                MBEDTLS_ERR_SSL_INTERNAL_ERROR
             }
         }
     }
@@ -139,8 +138,7 @@ impl<'a, S: Read + Write> TlsStream<'a, S> {
             Ok(n) => n as _,
             Err(e) => {
                 dbg!(e);
-                // MBEDTLS_ERR_ENTROPY_FILE_IO_ERROR
-                -1
+                MBEDTLS_ERR_SSL_INTERNAL_ERROR
             }
         }
     }
@@ -256,8 +254,7 @@ pub fn run() {
                 Ok(v) => v,
                 Err(e) => {
                     dbg!(e);
-                    panic!()
-                    // continue;
+                    continue;
                 }
             };
             // Unique::
