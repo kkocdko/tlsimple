@@ -6,4 +6,7 @@ edition = "2021"
 license = "MIT"
 
 [dependencies]
-# tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "fs"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "fs", "net", "io-util"] }
+
+[build-dependencies]
+cc = { version = "1", features = ["parallel"] }

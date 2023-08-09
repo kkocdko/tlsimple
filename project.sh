@@ -73,15 +73,17 @@ MBEDTLS_CFLAGS='-Wall -Wextra -g -fsanitize=address,undefined -fno-omit-frame-po
 
 if [ "$1" = "mbedtls" ]; then
   if [ "$2" = "init" ]; then
-    cd target
+    mkdir -p 3rdparty
+    cd 3rdparty
     if [ ! -e mbedtls.tar.gz ]; then
-      curl -o mbedtls.tar.gz -L https://github.com/Mbed-TLS/mbedtls/archive/refs/tags/v3.4.0.tar.gz
+      curl -o mbedtls.tar.gz -L https://github.com/Mbed-TLS/mbedtls/archive/refs/tags/v3.4.1.tar.gz
       # curl -o mbedtls.tar.gz -L https://github.com/Mbed-TLS/mbedtls/archive/refs/heads/development.tar.gz
     fi
     rm -rf mbedtls
     mkdir mbedtls
     tar_prefix=`tar -tf mbedtls.tar.gz | head -n1 | sed -e 's/\///g'`
     tar --strip-components 1 -xf mbedtls.tar.gz -C mbedtls $tar_prefix/include $tar_prefix/library
+    exit
     cd mbedtls
     # tar -cJf ../mbedtls.tar.xz -C .. mbedtls
     # ~/misc/apps/dua
@@ -107,10 +109,12 @@ fi
 
 if [ "$1" = "run-rust" ]; then
   export RUST_BACKTRACE=1
+  export RUSTC_BOOTSTRAP=1
   export RUSTFLAGS=-Zsanitizer=address
-  ~/misc/apps/mold -run cargo run
+  # ~/misc/apps/mold -run \
+  cargo run --target=x86_64-unknown-linux-gnu
   # cargo run
-  # https://doc.rust-lang.org/beta/unstable-book/compiler-flags/sanitizer.html
+  # https://doc.rust-lang.org/stable/unstable-book/compiler-flags/sanitizer.html#build-scripts-and-procedural-macros
 fi
 
 # curl https://127.0.0.1:11111/

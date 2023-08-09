@@ -2,3 +2,4 @@
 /Cargo.lock
 /.vscode/
 /src/mbedtls.h.rs
+/3rdparty/
