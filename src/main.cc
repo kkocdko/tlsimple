@@ -152,7 +152,6 @@ int main() {
         break;
       }
     } while (0);
-
     close(connd);
     // break; // used for leak san
   }

@@ -24,17 +24,18 @@ Simple and tiny TLS supports for Rust (Async FFI of Mbed TLS).
 - [x] Rust binding prototype worked.
 - [x] Fully control the build progress, use only gcc / ar command.
 - [ ] TLS 1.3.
-- [ ] Fix LeakSanitizer.
+- [x] Fix LeakSanitizer.
 - [ ] Test if C demo works in Windows.
-- [ ] Compile with the Rust cc crate.
-- [ ] Bind to Rust.
-- [ ] Bind to Rust with async.
+- [x] Compile with the Rust cc crate.
+- [x] Bind to Rust.
+- [x] Bind to Rust with async.
 - [ ] Bench OpenSSL and Mbed TLS.
 - [ ] Strip more.
-- [ ] Kernel TLS offload.
+- [ ] Kernel TLS offload?
 - [ ] Deploy.
 - [ ] Publish & Announce.
-- [ ] Provide blocking API.
+
+https://github.com/monoio-rs/monoio-tls
 
 https://github.com/Mbed-TLS/mbedtls/pull/5969
 
