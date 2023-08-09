@@ -29,6 +29,7 @@ Simple and tiny TLS supports for Rust (Async FFI of Mbed TLS).
 - [x] Compile with the Rust cc crate.
 - [x] Bind to Rust.
 - [x] Bind to Rust with async.
+- [ ] Miri, Loom, ThreadSanitizer and more.
 - [ ] Bench OpenSSL and Mbed TLS.
 - [ ] Strip more.
 - [ ] Kernel TLS offload?
