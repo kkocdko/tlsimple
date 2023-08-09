@@ -5,6 +5,8 @@ version = "0.1.2"
 edition = "2021"
 license = "MIT"
 
+include = ["/src", "/3rdparty"]
+
 [dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "fs", "net", "io-util"] }
 

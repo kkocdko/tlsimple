@@ -3,3 +3,4 @@
 /.vscode/
 /src/mbedtls.h.rs
 /3rdparty/
+/3rdparty/*.tar.gz

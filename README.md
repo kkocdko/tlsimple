@@ -31,7 +31,7 @@ Simple and tiny TLS supports for Rust (Async FFI of Mbed TLS).
 - [x] Bind to Rust with async.
 - [ ] Miri, Loom, ThreadSanitizer and more.
 - [ ] Bench OpenSSL and Mbed TLS.
-- [ ] Strip more.
+- [x] Strip more.
 - [ ] Kernel TLS offload?
 - [ ] Deploy.
 - [ ] Publish & Announce.
@@ -49,7 +49,7 @@ https://curl.se/docs/ssl-compared.html
 <!--
 cargo install bindgen-cli
 sudo dnf install clang-devel
-bindgen src/mbedtls.h -o src/mbedtls.h.rs -- -Itarget/mbedtls/include
+bindgen src/mbedtls.h -o src/mbedtls.h.rs -- -I3rdparty/mbedtls/include
 https://rust-lang.github.io/rust-bindgen/allowlisting.html
 -->
 
