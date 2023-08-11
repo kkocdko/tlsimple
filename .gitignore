@@ -1,6 +1,7 @@
 /target/
 /Cargo.lock
 /.vscode/
-/src/mbedtls.h.rs
+/src/mbedtls_h.rs
+/src/mbedtls_err.rs
 /3rdparty/
 /3rdparty/*.tar.gz

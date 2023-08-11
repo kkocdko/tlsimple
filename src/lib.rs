@@ -9,6 +9,7 @@ use std::task::Context;
 use std::task::Poll;
 
 mod ffi;
+mod mbedtls_err;
 use ffi::*;
 
 pub struct TlsConfig {
@@ -350,7 +351,7 @@ impl<'a, S: AsyncRead> AsyncRead for TlsStream<'a, S> {
                 // MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY => Err(io::Error::new(io::ErrorKind::Other,"MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY")),
                 // question: <= 0 or < 0 ?
                 _ if ret < 0 => {
-                    dbg!(ret);
+                    dbg!(mbedtls_err::err_name(ret));
                     Poll::Ready(Err(io::Error::new(io::ErrorKind::Other, format!("{ret}"))))
                 }
                 _ => {
@@ -379,7 +380,7 @@ impl<'a, S: AsyncWrite> AsyncWrite for TlsStream<'a, S> {
                 MBEDTLS_ERR_SSL_WANT_WRITE => Poll::Pending,
                 // question: <= 0 or < 0 ?
                 _ if ret < 0 => {
-                    dbg!(ret);
+                    dbg!(mbedtls_err::err_name(ret));
                     Poll::Ready(Err(io::Error::new(io::ErrorKind::Other, format!("{ret}"))))
                 }
                 _ => Poll::Ready(Ok(ret as usize)),

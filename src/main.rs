@@ -92,12 +92,12 @@ fn run() {
 }
 
 fn main() {
-    // return run();
-    tokio::runtime::Builder::new_multi_thread()
-        .enable_all()
-        .build()
-        .unwrap()
-        .block_on(run_async());
+    return run();
+    // tokio::runtime::Builder::new_multi_thread()
+    //     .enable_all()
+    //     .build()
+    //     .unwrap()
+    //     .block_on(run_async());
 }
 
 // https://github.com/Mbed-TLS/mbedtls/issues/7722

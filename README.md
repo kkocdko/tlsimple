@@ -52,7 +52,7 @@ https://curl.se/docs/ssl-compared.html
 <!--
 cargo install bindgen-cli
 sudo dnf install clang-devel
-bindgen src/mbedtls.h -o src/mbedtls.h.rs -- -I3rdparty/mbedtls/include
+bindgen src/mbedtls.h -o src/mbedtls_h.rs -- -I3rdparty/mbedtls/include
 https://rust-lang.github.io/rust-bindgen/allowlisting.html
 -->
 
