@@ -72,6 +72,8 @@ fn run() {
 
             let mut buf = [0; 256];
 
+            // loop{
+
             let len = tls_stream.read(&mut buf).unwrap();
             println!("----- read\n{}-----", String::from_utf8_lossy(&buf[..len]));
 
@@ -80,6 +82,7 @@ fn run() {
             write_buf += tls_stream.get_ciphersuite();
             write_buf += "\n";
             tls_stream.write(write_buf.as_bytes()).unwrap();
+            // }
 
             tls_stream.close_notify();
             drop(tls_stream);

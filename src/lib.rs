@@ -26,7 +26,7 @@ unsafe impl Send for TlsConfig {}
 impl Drop for TlsConfig {
     fn drop(&mut self) {
         unsafe {
-            // println!(">>> TlsConfig::drop()");
+            println!(">>> TlsConfig::drop()");
             mbedtls_ssl_config_free(&mut self.conf as _);
             mbedtls_pk_free(&mut self.pkey as _);
             mbedtls_x509_crt_free(&mut self.srvcert as _);
@@ -125,6 +125,7 @@ unsafe impl<'a, S> Send for TlsStream<'a, S> {}
 impl<'a, S> Drop for TlsStream<'a, S> {
     fn drop(&mut self) {
         unsafe {
+            println!(">>> TlsStream::drop()");
             mbedtls_ssl_free(&mut self.ssl as _);
         }
     }
@@ -149,7 +150,7 @@ impl<'a, S> TlsStream<'a, S> {
         mbedtls_ssl_init(ssl_p);
         let ret = mbedtls_ssl_setup(ssl_p, &tls_config.conf as _);
         assert_eq!(ret, 0);
-        // let ret = mbedtls_ssl_session_reset(ssl_p);
+        let ret = mbedtls_ssl_session_reset(ssl_p);
         mbedtls_ssl_set_bio(ssl_p, place.as_mut_ptr() as _, bio_send, bio_recv, None);
     }
 
@@ -335,6 +336,10 @@ impl<'a, S: AsyncRead> AsyncRead for TlsStream<'a, S> {
         self.context = cx as *mut _ as _;
         let ret = unsafe {
             let slice = buf.unfilled_mut();
+            // let slice = {
+            //     let buf = buf.unfilled_mut();
+            //     slice::from_raw_parts_mut(buf.as_mut_ptr().cast::<u8>(), buf.len())
+            // };
             let ret = mbedtls_ssl_read(
                 &mut self.ssl as *mut _,
                 slice.as_mut_ptr() as _,
@@ -345,6 +350,7 @@ impl<'a, S: AsyncRead> AsyncRead for TlsStream<'a, S> {
                 // MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY => Err(io::Error::new(io::ErrorKind::Other,"MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY")),
                 // question: <= 0 or < 0 ?
                 _ if ret < 0 => {
+                    dbg!(ret);
                     Poll::Ready(Err(io::Error::new(io::ErrorKind::Other, format!("{ret}"))))
                 }
                 _ => {
@@ -373,6 +379,7 @@ impl<'a, S: AsyncWrite> AsyncWrite for TlsStream<'a, S> {
                 MBEDTLS_ERR_SSL_WANT_WRITE => Poll::Pending,
                 // question: <= 0 or < 0 ?
                 _ if ret < 0 => {
+                    dbg!(ret);
                     Poll::Ready(Err(io::Error::new(io::ErrorKind::Other, format!("{ret}"))))
                 }
                 _ => Poll::Ready(Ok(ret as usize)),

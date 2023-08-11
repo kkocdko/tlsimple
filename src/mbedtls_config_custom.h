@@ -1,5 +1,5 @@
 #include "mbedtls/mbedtls_config.h"
-// /*
+/*
 #define MBEDTLS_DEPRECATED_REMOVED
 
 #undef MBEDTLS_ERROR_C
@@ -79,6 +79,7 @@
 // #undef MBEDTLS_SSL_KEEP_PEER_CERTIFICATE // even bigger
 
 // https://github.com/Mbed-TLS/mbedtls/tree/development/configs
-// */
+*/
 
 // #define MBEDTLS_SSL_PROTO_TLS1_3
+// #undef MBEDTLS_ECP_DP_SECP384R1_ENABLED

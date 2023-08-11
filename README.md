@@ -30,6 +30,9 @@ Simple and tiny TLS supports for Rust (Async FFI of Mbed TLS).
 - [x] Bind to Rust.
 - [x] Bind to Rust with async.
 - [ ] Miri, Loom, ThreadSanitizer and more.
+- [ ] Client mode.
+- [x] Deploy on Tokio current-thread runtime.
+- [ ] Fix crach on Tokio multi-thread runtime.
 - [ ] Bench OpenSSL and Mbed TLS.
 - [x] Strip more.
 - [ ] Kernel TLS offload?
@@ -61,6 +64,9 @@ https://www.wolfssl.com/documentation/manuals/wolfssl/chapter02.html
 先尝试 bindgen 或者其他方案
 crate “cc”
 绑定代码？询问
+
+https://doc.rust-lang.org/cargo/reference/manifest.html#the-exclude-and-include-fields
+
 
 cargo install bindgen-cli
 

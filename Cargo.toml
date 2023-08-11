@@ -1,14 +1,14 @@
 [package]
 name = "tlsimple"
 description = "Simple and tiny TLS supports for Rust (Async FFI of Mbed TLS)."
-version = "0.1.2"
+version = "0.1.3"
 edition = "2021"
 license = "MIT"
 
-include = ["/src", "/3rdparty"]
+include = ["/build.rs", "/src", "/3rdparty", "!/3rdparty/mbedtls.tar.gz"]
 
 [dependencies]
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "fs", "net", "io-util"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "io-util"] }
 
 [build-dependencies]
 cc = { version = "1", features = ["parallel"] }
