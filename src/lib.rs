@@ -12,10 +12,46 @@ mod ffi;
 mod mbedtls_err;
 use ffi::*;
 
+pub mod alpn {
+    use std::ptr;
+    pub const NULL: *mut *const std::ffi::c_char = ptr::null_mut() as _;
+    pub const H1: *mut *const std::ffi::c_char =
+        &[b"http/1.1\0" as _, ptr::null() as *const u8] as *const _ as _;
+    pub const H2: *mut *const std::ffi::c_char =
+        &[b"h2\0" as _, ptr::null() as *const u8] as *const _ as _;
+    pub const H1H2: *mut *const std::ffi::c_char =
+        &[b"http/1.1\0" as _, b"h2\0" as _, ptr::null() as *const u8] as *const _ as _;
+    pub const H2H1: *mut *const std::ffi::c_char =
+        &[b"h2\0" as _, b"http/1.1\0" as _, ptr::null() as *const u8] as *const _ as _;
+}
+
+pub enum TlsBuilder<'a> {
+    Server {
+        cert_der: &'a [u8],
+        key_der: &'a [u8],
+        alpn: *mut *const std::ffi::c_char,
+    },
+    Client {
+        ca_der: &'a [u8],
+        // alpn: *mut *const std::ffi::c_char,
+    },
+}
+
+impl<'a> TlsBuilder<'a> {
+    pub fn build(self) -> Pin<Box<TlsConfig>> {
+        unsafe {
+            let mut place = Box::pin(MaybeUninit::uninit());
+            TlsConfig::init_inplace(&mut place, self);
+            place.assume_init_ref(); // for the inner `intrinsics::assert_inhabited`;
+            std::mem::transmute(place) // because MaybeUninit has `#[repr(transparent)]`
+        }
+    }
+}
+
 pub struct TlsConfig {
     entropy: mbedtls_entropy_context,
     ctr_drbg: mbedtls_ctr_drbg_context,
-    srvcert: mbedtls_x509_crt,
+    cert: mbedtls_x509_crt,
     pkey: mbedtls_pk_context,
     conf: mbedtls_ssl_config,
 }
@@ -30,7 +66,7 @@ impl Drop for TlsConfig {
             println!(">>> TlsConfig::drop()");
             mbedtls_ssl_config_free(&mut self.conf as _);
             mbedtls_pk_free(&mut self.pkey as _);
-            mbedtls_x509_crt_free(&mut self.srvcert as _);
+            mbedtls_x509_crt_free(&mut self.cert as _);
             mbedtls_ctr_drbg_free(&mut self.ctr_drbg as _);
             mbedtls_entropy_free(&mut self.entropy as _);
         }
@@ -38,7 +74,7 @@ impl Drop for TlsConfig {
 }
 
 impl TlsConfig {
-    pub unsafe fn init_inplace(place: &mut MaybeUninit<Self>, cert_der: &[u8], key_der: &[u8]) {
+    pub unsafe fn init_inplace(place: &mut MaybeUninit<Self>, builder: TlsBuilder) {
         let p = place.as_mut_ptr();
         macro_rules! field {
             ($field:ident) => {
@@ -49,7 +85,7 @@ impl TlsConfig {
 
         let entropy_p = field!(entropy);
         let ctr_drbg_p = field!(ctr_drbg);
-        let srvcert_p = field!(srvcert);
+        let cert_p = field!(cert);
         let pkey_p = field!(pkey);
         let conf_p = field!(conf);
 
@@ -66,47 +102,70 @@ impl TlsConfig {
         );
         assert_eq!(ret, 0);
 
-        // safety: cert and key will be cloned by mbedtls_xxx_parse function
+        if let TlsBuilder::Client { ca_der } = builder {
+            mbedtls_x509_crt_init(cert_p);
+            ret = mbedtls_x509_crt_parse(cert_p, ca_der.as_ptr(), ca_der.len());
+            assert_eq!(ret, 0);
 
-        mbedtls_x509_crt_init(srvcert_p);
-        ret = mbedtls_x509_crt_parse(srvcert_p, cert_der.as_ptr(), cert_der.len());
-        assert_eq!(ret, 0);
+            mbedtls_ssl_config_init(conf_p);
+            ret = mbedtls_ssl_config_defaults(
+                conf_p,
+                MBEDTLS_SSL_IS_CLIENT,
+                MBEDTLS_SSL_TRANSPORT_STREAM,
+                MBEDTLS_SSL_PRESET_DEFAULT,
+            );
+            assert_eq!(ret, 0);
+            mbedtls_ssl_conf_rng(conf_p, Some(mbedtls_ctr_drbg_random), ctr_drbg_p as _);
 
-        mbedtls_pk_init(pkey_p);
-        ret = mbedtls_pk_parse_key(
-            pkey_p,
-            key_der.as_ptr(),
-            key_der.len(),
-            ptr::null(),
-            0,
-            Some(mbedtls_ctr_drbg_random),
-            ctr_drbg_p as _,
-        );
-        assert_eq!(ret, 0);
+            mbedtls_ssl_conf_ca_chain(conf_p, cert_p, ptr::null_mut());
+            mbedtls_ssl_conf_authmode(conf_p, MBEDTLS_SSL_VERIFY_NONE);
+            // mbedtls_ssl_conf_authmode(conf_p, MBEDTLS_SSL_VERIFY_REQUIRED);
+            // mbedtls_ssl_set_hostname(ss;, hostname)
+        }
 
-        mbedtls_ssl_config_init(conf_p);
-        ret = mbedtls_ssl_config_defaults(
-            conf_p,
-            MBEDTLS_SSL_IS_SERVER as _,
-            MBEDTLS_SSL_TRANSPORT_STREAM as _,
-            MBEDTLS_SSL_PRESET_DEFAULT as _,
-        );
-        assert_eq!(ret, 0);
-        mbedtls_ssl_conf_rng(conf_p, Some(mbedtls_ctr_drbg_random), ctr_drbg_p as _);
-        mbedtls_ssl_conf_ca_chain(conf_p, (*srvcert_p).next, ptr::null_mut());
-        ret = mbedtls_ssl_conf_own_cert(conf_p, srvcert_p, pkey_p);
-        assert_eq!(ret, 0);
+        if let TlsBuilder::Server {
+            cert_der,
+            key_der,
+            alpn,
+        } = builder
+        {
+            // safety: cert and key will be cloned by mbedtls_xxx_parse function
+            mbedtls_x509_crt_init(cert_p);
+            ret = mbedtls_x509_crt_parse(cert_p, cert_der.as_ptr(), cert_der.len());
+            assert_eq!(ret, 0);
 
-        // static CIPHERSUITES: [i32; 2] = [MBEDTLS_TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256 as i32, 0]; // only one ciphersuite. must be static here, or AddressSanitizer: heap-use-after-free
-        // mbedtls_ssl_conf_ciphersuites(conf_p, CIPHERSUITES.as_ptr());
-    }
+            mbedtls_pk_init(pkey_p);
+            ret = mbedtls_pk_parse_key(
+                pkey_p,
+                key_der.as_ptr(),
+                key_der.len(),
+                ptr::null(),
+                0,
+                Some(mbedtls_ctr_drbg_random),
+                ctr_drbg_p as _,
+            );
+            assert_eq!(ret, 0);
 
-    pub fn new(cert_der: &[u8], key_der: &[u8]) -> Pin<Box<Self>> {
-        unsafe {
-            let mut place = Box::pin(MaybeUninit::uninit());
-            Self::init_inplace(&mut place, cert_der, key_der);
-            place.assume_init_ref(); // for the inner `intrinsics::assert_inhabited`;
-            std::mem::transmute(place) // because MaybeUninit has `#[repr(transparent)]`
+            mbedtls_ssl_config_init(conf_p);
+            ret = mbedtls_ssl_config_defaults(
+                conf_p,
+                MBEDTLS_SSL_IS_SERVER,
+                MBEDTLS_SSL_TRANSPORT_STREAM,
+                MBEDTLS_SSL_PRESET_DEFAULT,
+            );
+            assert_eq!(ret, 0);
+            mbedtls_ssl_conf_rng(conf_p, Some(mbedtls_ctr_drbg_random), ctr_drbg_p as _);
+            mbedtls_ssl_conf_ca_chain(conf_p, (*cert_p).next, ptr::null_mut());
+            ret = mbedtls_ssl_conf_own_cert(conf_p, cert_p, pkey_p);
+            assert_eq!(ret, 0);
+
+            if alpn != alpn::NULL {
+                mbedtls_ssl_conf_alpn_protocols(conf_p, alpn);
+            }
+
+            // static CIPHERSUITES: [i32; 2] =
+            //     [MBEDTLS_TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256 as i32, 0]; // only one ciphersuite. must be static here, or AddressSanitizer: heap-use-after-free
+            // mbedtls_ssl_conf_ciphersuites(conf_p, CIPHERSUITES.as_ptr());
         }
     }
 }
@@ -151,7 +210,7 @@ impl<'a, S> TlsStream<'a, S> {
         mbedtls_ssl_init(ssl_p);
         let ret = mbedtls_ssl_setup(ssl_p, &tls_config.conf as _);
         assert_eq!(ret, 0);
-        let ret = mbedtls_ssl_session_reset(ssl_p);
+        // let ret = mbedtls_ssl_session_reset(ssl_p);
         mbedtls_ssl_set_bio(ssl_p, place.as_mut_ptr() as _, bio_send, bio_recv, None);
     }
 
@@ -201,6 +260,7 @@ impl<'a, S: Read + Write> TlsStream<'a, S> {
                 }
             }
         }
+
         unsafe extern "C" fn bio_recv<S: Read + Write>(
             ctx: *mut c_void,
             buf: *mut u8,
@@ -216,6 +276,7 @@ impl<'a, S: Read + Write> TlsStream<'a, S> {
                 }
             }
         }
+
         unsafe {
             let mut place = Box::pin(MaybeUninit::<Self>::uninit());
             Self::init_inplace(

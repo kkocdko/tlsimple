@@ -14,11 +14,18 @@ const KEY_DER: &[u8] = b"\x30\x82\x04\xbf\x02\x01\x00\x30\x0d\x06\x09\x2a\x86\x4
 
 const SERVER_ADDR: &str = "127.0.0.1:11111";
 
-async fn run_async() {
-    use tlsimple::{TlsConfig, TlsStream};
+async fn run_server_async() {
+    use tlsimple::{alpn, TlsBuilder, TlsStream};
     use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
-    let tls_config = Arc::new(TlsConfig::new(CERT_DER, KEY_DER));
+    let tls_config = Arc::new(
+        TlsBuilder::Server {
+            cert_der: CERT_DER,
+            key_der: KEY_DER,
+            alpn: alpn::NULL,
+        }
+        .build(),
+    );
     let listener = tokio::net::TcpListener::bind(SERVER_ADDR).await.unwrap();
     loop {
         let (mut stream, socket_addr) = match listener.accept().await {
@@ -52,10 +59,17 @@ async fn run_async() {
     }
 }
 
-fn run() {
-    use tlsimple::{TlsConfig, TlsStream};
+fn run_server() {
+    use tlsimple::{alpn, TlsBuilder, TlsStream};
 
-    let tls_config = Arc::new(TlsConfig::new(CERT_DER, KEY_DER));
+    let tls_config = Arc::new(
+        TlsBuilder::Server {
+            cert_der: CERT_DER,
+            key_der: KEY_DER,
+            alpn: alpn::NULL,
+        }
+        .build(),
+    );
     let listener = TcpListener::bind(SERVER_ADDR).unwrap();
     loop {
         let (mut stream, socket_addr) = match listener.accept() {
@@ -91,8 +105,34 @@ fn run() {
     }
 }
 
+fn run_client() {
+    use tlsimple::{alpn, TlsBuilder, TlsStream};
+
+    let tls_config = Arc::new(TlsBuilder::Client { ca_der: CERT_DER }.build());
+    let mut stream = std::net::TcpStream::connect("127.0.0.1:9304").unwrap();
+    let mut tls_stream = TlsStream::new_sync(&tls_config, &mut stream);
+
+    let write_buf = b"GET / HTTP/1.1\r\nHost: 127.0.0.1:9304\r\n\r\n";
+    tls_stream.write(write_buf).unwrap();
+
+    let mut buf = [0; 4096];
+    let len = tls_stream.read(&mut buf).unwrap();
+    println!("----- read\n{}-----", String::from_utf8_lossy(&buf[..len]));
+
+    // let mut write_buf = String::new();
+    // write_buf += "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\nHello world! ciphersuite = ";
+    // write_buf += tls_stream.get_ciphersuite();
+    // write_buf += "\n";
+    // tls_stream.write(write_buf.as_bytes()).unwrap();
+    // // }
+
+    // tls_stream.close_notify();
+    // drop(tls_stream);
+    // stream.shutdown(std::net::Shutdown::Both).unwrap();
+}
+
 fn main() {
-    return run();
+    return run_client();
     // tokio::runtime::Builder::new_multi_thread()
     //     .enable_all()
     //     .build()
