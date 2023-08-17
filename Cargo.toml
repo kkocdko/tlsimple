@@ -9,6 +9,7 @@ include = ["/build.rs", "/src", "/3rdparty", "!/3rdparty/mbedtls.tar.gz"]
 
 [dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "io-util"] }
+hyper = { version = "0.14", features = ["client"] }
 
 [build-dependencies]
 cc = { version = "1", features = ["parallel"] }

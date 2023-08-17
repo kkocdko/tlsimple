@@ -15,17 +15,10 @@ const KEY_DER: &[u8] = b"\x30\x82\x04\xbf\x02\x01\x00\x30\x0d\x06\x09\x2a\x86\x4
 const SERVER_ADDR: &str = "127.0.0.1:11111";
 
 async fn run_server_async() {
-    use tlsimple::{alpn, TlsBuilder, TlsStream};
-    use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+    use tlsimple::{alpn, TlsConfig, TlsStream};
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-    let tls_config = Arc::new(
-        TlsBuilder::Server {
-            cert_der: CERT_DER,
-            key_der: KEY_DER,
-            alpn: alpn::NULL,
-        }
-        .build(),
-    );
+    let tls_config = TlsConfig::new_server(CERT_DER, KEY_DER, alpn::NULL);
     let listener = tokio::net::TcpListener::bind(SERVER_ADDR).await.unwrap();
     loop {
         let (mut stream, socket_addr) = match listener.accept().await {
@@ -36,10 +29,10 @@ async fn run_server_async() {
             }
         };
         dbg!(socket_addr);
-        let tls_config = Arc::clone(&tls_config);
+        let tls_config = tls_config.clone();
         tokio::spawn(async move {
             // let mut stream_wrapper = StreamWrapper { stream, context: 0 };
-            let mut tls_stream = TlsStream::new_async(&tls_config, &mut stream);
+            let mut tls_stream = TlsStream::new_async(tls_config, &mut stream);
 
             let mut buf = [0; 256];
 
@@ -60,16 +53,9 @@ async fn run_server_async() {
 }
 
 fn run_server() {
-    use tlsimple::{alpn, TlsBuilder, TlsStream};
+    use tlsimple::{alpn, TlsConfig, TlsStream};
 
-    let tls_config = Arc::new(
-        TlsBuilder::Server {
-            cert_der: CERT_DER,
-            key_der: KEY_DER,
-            alpn: alpn::NULL,
-        }
-        .build(),
-    );
+    let tls_config = TlsConfig::new_server(CERT_DER, KEY_DER, alpn::NULL);
     let listener = TcpListener::bind(SERVER_ADDR).unwrap();
     loop {
         let (mut stream, socket_addr) = match listener.accept() {
@@ -80,9 +66,9 @@ fn run_server() {
             }
         };
         dbg!(socket_addr);
-        let tls_config = Arc::clone(&tls_config);
+        let tls_config = tls_config.clone();
         thread::spawn(move || {
-            let mut tls_stream = TlsStream::new_sync(&tls_config, &mut stream);
+            let mut tls_stream = TlsStream::new_sync(tls_config, &mut stream);
 
             let mut buf = [0; 256];
 
@@ -106,11 +92,11 @@ fn run_server() {
 }
 
 fn run_client() {
-    use tlsimple::{alpn, TlsBuilder, TlsStream};
+    use tlsimple::{alpn, TlsConfig, TlsStream};
 
-    let tls_config = Arc::new(TlsBuilder::Client { ca_der: CERT_DER }.build());
+    let tls_config = TlsConfig::new_client(CERT_DER);
     let mut stream = std::net::TcpStream::connect("127.0.0.1:9304").unwrap();
-    let mut tls_stream = TlsStream::new_sync(&tls_config, &mut stream);
+    let mut tls_stream = TlsStream::new_sync(tls_config, &mut stream);
 
     let write_buf = b"GET / HTTP/1.1\r\nHost: 127.0.0.1:9304\r\n\r\n";
     tls_stream.write(write_buf).unwrap();
@@ -132,12 +118,12 @@ fn run_client() {
 }
 
 fn main() {
-    return run_client();
+    // return run_server();
     // tokio::runtime::Builder::new_multi_thread()
     //     .enable_all()
     //     .build()
     //     .unwrap()
-    //     .block_on(run_async());
+    //     .block_on(run_server_async());
 }
 
 // https://github.com/Mbed-TLS/mbedtls/issues/7722

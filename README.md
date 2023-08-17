@@ -53,6 +53,8 @@ https://dev.mysql.com/blog-archive/mysql-is-openssl-only-now/
 
 https://curl.se/docs/ssl-compared.html
 
+https://wiki.mozilla.org/Security/Server_Side_TLS
+
 <!--
 cargo install bindgen-cli
 sudo dnf install clang-devel
