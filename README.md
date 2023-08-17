@@ -33,7 +33,7 @@ Simple and tiny TLS supports for Rust (Async FFI of Mbed TLS).
 - [x] Set ALPN to use HTTP 2.
 - [x] Client mode.
 - [ ] Client mode cert vertify.
-- [ ] Client with Hyper.
+- [x] Client with Hyper.
 - [x] Deploy on Tokio current-thread runtime.
 - [ ] Fix crach on Tokio multi-thread runtime.
 - [ ] Bench OpenSSL and Mbed TLS.

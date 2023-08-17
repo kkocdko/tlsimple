@@ -56,7 +56,7 @@ unsafe impl Send for TlsConfig {}
 impl Drop for TlsConfig {
     fn drop(&mut self) {
         unsafe {
-            println!(">>> TlsConfig::drop()");
+            // println!(">>> TlsConfig::drop()");
             mbedtls_ssl_config_free(&mut self.conf as _);
             mbedtls_pk_free(&mut self.pkey as _);
             mbedtls_x509_crt_free(&mut self.cert as _);
@@ -112,6 +112,7 @@ impl TlsConfig {
 
             mbedtls_ssl_conf_ca_chain(conf_p, cert_p, ptr::null_mut());
             // in mbedtls docs: Default = NONE on server, REQUIRED on client
+            mbedtls_ssl_conf_authmode(conf_p, MBEDTLS_SSL_VERIFY_NONE);
             // mbedtls_ssl_conf_authmode(
             //     conf_p,
             //     if vertify {
@@ -267,6 +268,10 @@ impl<S> TlsStream<S> {
             std::str::from_utf8_unchecked(slice::from_raw_parts(p as _, len))
         }
     }
+
+    pub fn get_ref_stream(&self) -> &S {
+        &self.stream
+    }
 }
 
 impl<S: Read + Write + Unpin> TlsStream<S> {
@@ -326,7 +331,10 @@ impl<S: Read> Read for TlsStream<S> {
                 // MBEDTLS_ERR_SSL_WANT_READ => Err(io::Error::from(io::ErrorKind::WouldBlock)),
                 // MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY => Err(io::Error::new(io::ErrorKind::Other,"MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY")),
                 // question: <= 0 or < 0 ?
-                _ if ret < 0 => Err(io::Error::new(io::ErrorKind::Other, format!("{ret}"))),
+                _ if ret < 0 => Err(io::Error::new(
+                    io::ErrorKind::Other,
+                    mbedtls_err::err_name(ret),
+                )),
                 _ => Ok(ret as _),
             }
         }
@@ -339,7 +347,10 @@ impl<S: Write> Write for TlsStream<S> {
             let ret = mbedtls_ssl_write(&mut self.ssl as *mut _, buf.as_ptr(), buf.len());
             match ret {
                 // MBEDTLS_ERR_SSL_WANT_WRITE => Err(io::Error::from(io::ErrorKind::WouldBlock)),
-                _ if ret < 0 => Err(io::Error::new(io::ErrorKind::Other, format!("{ret}"))),
+                _ if ret < 0 => Err(io::Error::new(
+                    io::ErrorKind::Other,
+                    mbedtls_err::err_name(ret),
+                )),
                 _ => Ok(ret as _),
             }
         }
@@ -434,7 +445,7 @@ impl<S: AsyncRead + Unpin> AsyncRead for TlsStream<S> {
                 slice.len(),
             );
             match ret {
-                MBEDTLS_ERR_SSL_WANT_READ => Poll::Pending,
+                MBEDTLS_ERR_SSL_WANT_READ | MBEDTLS_ERR_SSL_WANT_WRITE => Poll::Pending,
                 // MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY => Err(io::Error::new(io::ErrorKind::Other,"MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY")),
                 // question: <= 0 or < 0 ?
                 _ if ret < 0 => {
@@ -464,7 +475,7 @@ impl<S: AsyncWrite + Unpin> AsyncWrite for TlsStream<S> {
         let ret = unsafe {
             let ret = mbedtls_ssl_write(&mut self.ssl as *mut _, buf.as_ptr(), buf.len());
             match ret {
-                MBEDTLS_ERR_SSL_WANT_WRITE => Poll::Pending,
+                MBEDTLS_ERR_SSL_WANT_READ | MBEDTLS_ERR_SSL_WANT_WRITE => Poll::Pending,
                 // question: <= 0 or < 0 ?
                 _ if ret < 0 => {
                     dbg!(mbedtls_err::err_name(ret));
@@ -485,21 +496,21 @@ impl<S: AsyncWrite + Unpin> AsyncWrite for TlsStream<S> {
         unsafe { Pin::new_unchecked(&mut self.stream).poll_shutdown(cx) }
     }
 }
-/*
+
 use hyper::client::connect::Connection;
 use hyper::http::uri::Scheme;
 use hyper::service::Service;
 use hyper::Uri;
 
 /// A stream which may be wrapped with TLS.
-pub enum MaybeTlsStream<'a, T> {
+pub enum MaybeTlsStream<T> {
     /// Raw stream.
     Raw(T),
     /// TLS-wrapped stream.
-    Tls(Pin<Box<TlsStream<'a, T>>>),
+    Tls(Pin<Box<TlsStream<T>>>),
 }
 
-impl< T: AsyncRead + Unpin> AsyncRead for MaybeTlsStream<'a, T> {
+impl<T: AsyncRead + Unpin> AsyncRead for MaybeTlsStream<T> {
     fn poll_read(
         mut self: Pin<&mut Self>,
         cx: &mut Context,
@@ -512,7 +523,7 @@ impl< T: AsyncRead + Unpin> AsyncRead for MaybeTlsStream<'a, T> {
     }
 }
 
-impl< T: AsyncWrite + Unpin> AsyncWrite for MaybeTlsStream<'a, T> {
+impl<T: AsyncWrite + Unpin> AsyncWrite for MaybeTlsStream<T> {
     fn poll_write(
         mut self: Pin<&mut Self>,
         ctx: &mut Context,
@@ -539,44 +550,37 @@ impl< T: AsyncWrite + Unpin> AsyncWrite for MaybeTlsStream<'a, T> {
     }
 }
 
-// impl<T> Connection for MaybeHttpsStream<T>
-// where
-//     T: Connection,
-// {
-//     fn connected(&self) -> Connected {
-//         match self {
-//             MaybeHttpsStream::Http(s) => s.connected(),
-//             MaybeHttpsStream::Https(s) => {
-//                 let mut connected = s.get_ref().connected();
-//                 #[cfg(ossl102)]
-//                 {
-//                     if s.ssl().selected_alpn_protocol() == Some(b"h2") {
-//                         connected = connected.negotiated_h2();
-//                     }
-//                 }
-//                 connected
-//             }
-//         }
-//     }
-// }
+impl<T: Connection> Connection for MaybeTlsStream<T> {
+    fn connected(&self) -> hyper::client::connect::Connected {
+        match self {
+            MaybeTlsStream::Raw(s) => s.connected(),
+            MaybeTlsStream::Tls(s) => s.get_ref_stream().connected(),
+        }
+    }
+}
 
 #[derive(Clone)]
-pub struct HttpsConnector<'a, T> {
+pub struct HttpsConnector<T> {
     http: T,
-    tls_config: &'a TlsConfig,
+    tls_config: Pin<Arc<TlsConfig>>,
 }
- */
-/*
+
+impl<T> HttpsConnector<T> {
+    pub fn new(http: T, tls_config: Pin<Arc<TlsConfig>>) -> Self {
+        Self { http, tls_config }
+    }
+}
+
 impl<S> Service<Uri> for HttpsConnector<S>
 where
-    S: Service<Uri> + Send + 'a,
+    S: Service<Uri> + Send,
     S::Error: Into<Box<dyn Error + Send + Sync>>,
     S::Future: Send + 'static,
     S::Response: AsyncRead + AsyncWrite + Connection + Send + Unpin,
 {
-    type Response = MaybeTlsStream<'a, S::Response>;
+    type Response = MaybeTlsStream<S::Response>;
     type Error = Box<dyn Error + Sync + Send>;
-    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + 'a>>;
+    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
 
     fn poll_ready(&mut self, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
         self.http.poll_ready(cx).map_err(Into::into)
@@ -586,12 +590,10 @@ where
         let is_tls = uri.scheme() == Some(&Scheme::HTTPS);
         let connect = self.http.call(uri);
         if is_tls {
-            let b = Box::new(async move {
+            let tls_config = self.tls_config.clone();
+            return Box::pin(async move {
                 let conn = connect.await.map_err(Into::into)?;
-                Ok(MaybeTlsStream::Tls(TlsStream::new_async(
-                    &self.tls_config,
-                    conn,
-                )))
+                Ok(MaybeTlsStream::Tls(TlsStream::new_async(tls_config, conn)))
             });
         } else {
             return Box::pin(async move {
@@ -601,54 +603,3 @@ where
         }
     }
 }
-
-impl<S> HttpsConnector<S>
-where
-    S: Service<Uri> + Send + 'a,
-    S::Error: Into<Box<dyn Error + Send + Sync>>,
-    S::Future: Send + 'static,
-    S::Response: AsyncRead + AsyncWrite + Connection + Send + Unpin,
-{
-    fn ca6ll(
-        &mut self,
-        uri: Uri,
-    ) -> Pin<
-        Box<
-            dyn Future<
-                    Output = Result<MaybeTlsStream<'a, S::Response>, Box<dyn Error + Send + Sync>>,
-                > + Send
-                + '_,
-        >,
-    > {
-        let is_tls = uri.scheme() == Some(&Scheme::HTTPS);
-        let connect = self.http.call(uri);
-        if is_tls {
-            return Box::pin(async move {
-                let conn = connect.await.map_err(Into::into)?;
-                Ok(MaybeTlsStream::Tls(TlsStream::new_async(
-                    &self.tls_config,
-                    conn,
-                )))
-            });
-            // todo!()
-        } else {
-            return Box::pin(async move {
-                let conn = connect.await.map_err(Into::into)?;
-                Ok(MaybeTlsStream::Raw(conn))
-            });
-        }
-        // return Box::pin(async move {
-        //     let conn = connect.await.map_err(Into::into)?;
-        //     if is_tls {
-        //         Ok(MaybeTlsStream::Tls(TlsStream::new_async(
-        //             &self.tls_config,
-        //             conn,
-        //         )))
-        //         // todo!()
-        //     } else {
-        //         Ok(MaybeTlsStream::Raw(conn))
-        //     }
-        // });
-    }
-}
- */
