@@ -71,6 +71,10 @@ https://www.wolfssl.com/documentation/manuals/wolfssl/chapter02.html
 crate “cc”
 绑定代码？询问
 
+tlsimple (174 deps)  =  5783792 Aug 17 19:52 ksite
+rustls (183 deps)    =  6479280 Aug 17 20:10 ksite
+
+
 https://doc.rust-lang.org/cargo/reference/manifest.html#the-exclude-and-include-fields
 
 
@@ -89,4 +93,13 @@ tar -xf openssl.tar.gz --strip-components 1 -C openssl
 cd openssl
 rm -rf test doc demos CHANGES.md
 tar -cJf openssl.tar.xz openssl
+-->
+
+
+<!--
+https://mbed-tls.readthedocs.io/projects/api/en/development/api/file/net__sockets_8h/#net__sockets_8h_1a4841afd0e14f1fd44b82c3a850961ab7
+https://github.com/Mbed-TLS/mbedtls/tree/development/programs/ssl
+https://github.com/Mbed-TLS/mbedtls/blob/963513dba56991e2c741290841e2f33b9398ea52/programs/ssl/ssl_server2.c#L2855
+https://github.com/Mbed-TLS/mbedtls/blob/development/programs/ssl/mini_client.c
+https://github.com/sfackler/hyper-openssl/blob/master/src/lib.rs
 -->

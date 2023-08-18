@@ -18,7 +18,7 @@ async fn run_server_async() {
     use tlsimple::{alpn, TlsConfig, TlsStream};
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-    let tls_config = TlsConfig::new_server(CERT_DER, KEY_DER, alpn::NULL);
+    let tls_config = TlsConfig::new_server(CERT_DER, KEY_DER, None);
     let listener = tokio::net::TcpListener::bind(SERVER_ADDR).await.unwrap();
     loop {
         let (mut stream, socket_addr) = match listener.accept().await {
@@ -64,7 +64,7 @@ mod async_client {
         let mut http_conn = HttpConnector::new();
         http_conn.enforce_http(false); // allow HTTPS
         use tlsimple::{alpn, TlsConfig, TlsStream};
-        let tls_config = TlsConfig::new_client(super::CERT_DER);
+        let tls_config = TlsConfig::new_client(None);
         let connector = HttpsConnector::new(http_conn, tls_config);
         Client::builder().build(connector)
     });
@@ -179,7 +179,7 @@ async fn run_client_async() {
 fn run_server() {
     use tlsimple::{alpn, TlsConfig, TlsStream};
 
-    let tls_config = TlsConfig::new_server(CERT_DER, KEY_DER, alpn::NULL);
+    let tls_config = TlsConfig::new_server(CERT_DER, KEY_DER, None);
     let listener = TcpListener::bind(SERVER_ADDR).unwrap();
     loop {
         let (mut stream, socket_addr) = match listener.accept() {
@@ -218,7 +218,7 @@ fn run_server() {
 fn run_client() {
     use tlsimple::{alpn, TlsConfig, TlsStream};
 
-    let tls_config = TlsConfig::new_client(CERT_DER);
+    let tls_config = TlsConfig::new_client(None);
     let mut stream = std::net::TcpStream::connect("127.0.0.1:9304").unwrap();
     let mut tls_stream = TlsStream::new_sync(tls_config, &mut stream);
 
