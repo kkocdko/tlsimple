@@ -559,32 +559,41 @@ impl<T> HttpsConnector<T> {
 impl<S> Service<Uri> for HttpsConnector<S>
 where
     S: Service<Uri> + Send,
-    S::Error: Into<Box<dyn Error + Send + Sync>>,
-    S::Future: Send + 'static,
+    S::Error: Error + Send + Sync,
+    S::Future: Send + Unpin + 'static,
     S::Response: AsyncRead + AsyncWrite + Connection + Send + Unpin,
 {
     type Response = MaybeTlsStream<S::Response>;
-    type Error = Box<dyn Error + Sync + Send>;
+    type Error = S::Error;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
 
     fn poll_ready(&mut self, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
-        self.http.poll_ready(cx).map_err(Into::into)
+        self.http.poll_ready(cx)
     }
 
     fn call(&mut self, uri: Uri) -> Self::Future {
         let is_tls = uri.scheme() == Some(&Scheme::HTTPS);
         let connect = self.http.call(uri);
+        // use std::future::poll_fn;
+        // use std::future::PollFn;
+        // use std::task::ready;
+        // let code = poll_fn(|cx| {
+        //     let conn = ready!(Pin::new(&mut connect).poll(cx))?;
+        //     Poll::Ready(Ok(MaybeTlsStream::Tls(TlsStream::new_async(
+        //         tls_config, conn,
+        //     ))))
+        // });
         if is_tls {
             let tls_config = self.tls_config.clone();
-            return Box::pin(async move {
-                let conn = connect.await.map_err(Into::into)?;
+            Box::pin(async move {
+                let conn = connect.await?;
                 Ok(MaybeTlsStream::Tls(TlsStream::new_async(tls_config, conn)))
-            });
+            })
         } else {
-            return Box::pin(async move {
-                let conn = connect.await.map_err(Into::into)?;
+            Box::pin(async move {
+                let conn = connect.await?;
                 Ok(MaybeTlsStream::Raw(conn))
-            });
+            })
         }
     }
 }
