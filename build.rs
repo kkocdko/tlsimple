@@ -31,7 +31,7 @@ fn main() {
             parts.next();
             let k = parts.next().unwrap();
             let v = parts.next().unwrap();
-            write!(&mut match_block, "{v} => \"{k}\",\n").unwrap();
+            writeln!(&mut match_block, "{v} => \"{k}\",").unwrap();
         }
     }
     match_block += "_=>\"unknown\"}}";

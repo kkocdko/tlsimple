@@ -55,13 +55,12 @@ impl Drop for TlsConfig {
 
 impl TlsConfig {
     /// Prepare and init inner structs.
-    unsafe fn init(p: *mut TlsConfig) {
+    unsafe fn prepare_init(p: *mut TlsConfig) {
         macro_rules! p {
             ($field:ident) => {
                 std::ptr::addr_of_mut!((*p).$field)
             };
         }
-        let ret;
 
         mbedtls_entropy_init(p!(entropy));
         mbedtls_ctr_drbg_init(p!(ctr_drbg));
@@ -70,14 +69,14 @@ impl TlsConfig {
         mbedtls_ssl_config_init(p!(conf));
 
         let pers = "tlsimple";
-        ret = mbedtls_ctr_drbg_seed(
+        let code = mbedtls_ctr_drbg_seed(
             p!(ctr_drbg),
             Some(mbedtls_entropy_func),
             p!(entropy) as _,
             pers.as_ptr(),
             pers.len(),
         );
-        assert_eq!(ret, 0);
+        assert_eq!(code, 0);
 
         mbedtls_ssl_conf_rng(p!(conf), Some(mbedtls_ctr_drbg_random), p!(ctr_drbg) as _);
     }
@@ -90,28 +89,27 @@ impl TlsConfig {
         alpn: Option<*mut *const std::ffi::c_char>,
     ) {
         let p = place.as_mut_ptr();
-        Self::init(p);
+        Self::prepare_init(p);
         macro_rules! p {
             ($field:ident) => {
                 std::ptr::addr_of_mut!((*p).$field)
             };
         }
-        let mut ret;
 
-        ret = mbedtls_ssl_config_defaults(
+        let code = mbedtls_ssl_config_defaults(
             p!(conf),
             MBEDTLS_SSL_IS_SERVER,
             MBEDTLS_SSL_TRANSPORT_STREAM,
             MBEDTLS_SSL_PRESET_DEFAULT,
         );
-        assert_eq!(ret, 0);
+        assert_eq!(code, 0);
 
         // safety: cert and key will be cloned by mbedtls_xxx_parse function
 
-        ret = mbedtls_x509_crt_parse(p!(cert), cert.as_ptr(), cert.len());
-        assert_eq!(ret, 0);
+        let code = mbedtls_x509_crt_parse(p!(cert), cert.as_ptr(), cert.len());
+        assert_eq!(code, 0);
 
-        ret = mbedtls_pk_parse_key(
+        let code = mbedtls_pk_parse_key(
             p!(pkey),
             key.as_ptr(),
             key.len(),
@@ -120,12 +118,12 @@ impl TlsConfig {
             Some(mbedtls_ctr_drbg_random),
             p!(ctr_drbg) as _,
         );
-        assert_eq!(ret, 0);
+        assert_eq!(code, 0);
 
         // mbedtls_ssl_conf_ca_chain(p!(conf), (*p!(cert)).next, ptr::null_mut());
 
-        ret = mbedtls_ssl_conf_own_cert(p!(conf), p!(cert), p!(pkey));
-        assert_eq!(ret, 0);
+        let code = mbedtls_ssl_conf_own_cert(p!(conf), p!(cert), p!(pkey));
+        assert_eq!(code, 0);
 
         if let Some(alpn) = alpn {
             mbedtls_ssl_conf_alpn_protocols(p!(conf), alpn);
@@ -139,25 +137,24 @@ impl TlsConfig {
     /// Init a config for client inplace.
     pub unsafe fn init_client(place: &mut MaybeUninit<Self>, ca: Option<&[u8]>) {
         let p = place.as_mut_ptr();
-        Self::init(p);
+        Self::prepare_init(p);
         macro_rules! p {
             ($field:ident) => {
                 std::ptr::addr_of_mut!((*p).$field)
             };
         }
-        let mut ret;
 
-        ret = mbedtls_ssl_config_defaults(
+        let code = mbedtls_ssl_config_defaults(
             p!(conf),
             MBEDTLS_SSL_IS_CLIENT,
             MBEDTLS_SSL_TRANSPORT_STREAM,
             MBEDTLS_SSL_PRESET_DEFAULT,
         );
-        assert_eq!(ret, 0);
+        assert_eq!(code, 0);
 
         if let Some(ca) = ca {
-            ret = mbedtls_x509_crt_parse(p!(cert), ca.as_ptr(), ca.len());
-            assert_eq!(ret, 0);
+            let code = mbedtls_x509_crt_parse(p!(cert), ca.as_ptr(), ca.len());
+            assert_eq!(code, 0);
 
             mbedtls_ssl_conf_ca_chain(p!(conf), p!(cert), ptr::null_mut());
             // mbedtls_ssl_set_hostname(ss;, hostname)
@@ -216,6 +213,7 @@ impl<S> Drop for TlsStream<S> {
 }
 
 impl<S> TlsStream<S> {
+    /// Inplace constructor.
     pub unsafe fn init_inplace(
         place: &mut MaybeUninit<Self>,
         tls_config: Pin<Arc<TlsConfig>>,
@@ -233,17 +231,17 @@ impl<S> TlsStream<S> {
         });
         let ssl_p = std::ptr::addr_of_mut!((*place.as_mut_ptr()).ssl);
         mbedtls_ssl_init(ssl_p);
-        let ret = mbedtls_ssl_setup(ssl_p, conf_p);
-        assert_eq!(ret, 0);
-        // let ret = mbedtls_ssl_session_reset(ssl_p);
+        let code = mbedtls_ssl_setup(ssl_p, conf_p);
+        assert_eq!(code, 0);
+        // let code = mbedtls_ssl_session_reset(ssl_p);
         mbedtls_ssl_set_bio(ssl_p, place.as_mut_ptr() as _, bio_send, bio_recv, None);
     }
 
     fn accept(&mut self) {
         unsafe {
             // this seems redundant? mbedtls will auto do handshake on first read / write?
-            let ret = mbedtls_ssl_handshake(&mut self.ssl as *mut _);
-            assert_eq!(ret, 0);
+            let code = mbedtls_ssl_handshake(&mut self.ssl as *mut _);
+            assert_eq!(code, 0);
         }
     }
 
@@ -254,16 +252,16 @@ impl<S> TlsStream<S> {
         }
         unsafe {
             // safety: this function alloc and clone hostname inside
-            let ret = mbedtls_ssl_set_hostname(&mut self.ssl as *mut _, hostname.as_ptr() as _);
-            assert_eq!(ret, 0);
+            let code = mbedtls_ssl_set_hostname(&mut self.ssl as *mut _, hostname.as_ptr() as _);
+            assert_eq!(code, 0);
         }
     }
 
     pub fn close_notify(&mut self) {
         unsafe {
             // will be received on read / write error
-            let ret = mbedtls_ssl_close_notify(&mut self.ssl as *mut _);
-            assert_eq!(ret, 0);
+            let code = mbedtls_ssl_close_notify(&mut self.ssl as *mut _);
+            assert_eq!(code, 0);
         }
     }
 
@@ -283,47 +281,37 @@ impl<S> TlsStream<S> {
 }
 
 impl<S: Read + Write + Unpin> TlsStream<S> {
+    unsafe extern "C" fn bio_send(ctx: *mut c_void, buf: *const u8, len: usize) -> i32 {
+        let this = &mut *(ctx as *mut Self);
+        match this.stream.write(slice::from_raw_parts(buf, len)) {
+            Ok(n) => n as _,
+            Err(e) => {
+                dbg!(e);
+                MBEDTLS_ERR_SSL_INTERNAL_ERROR
+            }
+        }
+    }
+
+    unsafe extern "C" fn bio_recv(ctx: *mut c_void, buf: *mut u8, len: usize) -> i32 {
+        let this = &mut *(ctx as *mut Self);
+        match this.stream.read(slice::from_raw_parts_mut(buf, len)) {
+            Ok(n) => n as _,
+            Err(e) => {
+                dbg!(e);
+                MBEDTLS_ERR_SSL_INTERNAL_ERROR
+            }
+        }
+    }
+
     pub fn new_sync(tls_config: Pin<Arc<TlsConfig>>, stream: S) -> Pin<Box<Self>> {
-        unsafe extern "C" fn bio_send<S: Read + Write>(
-            ctx: *mut c_void,
-            buf: *const u8,
-            len: usize,
-        ) -> i32 {
-            let this = &mut *(ctx as *mut TlsStream<S>);
-            match this.stream.write(slice::from_raw_parts(buf, len)) {
-                Ok(n) => n as _,
-                // Err(e) if e.kind() == io::ErrorKind::WouldBlock => MBEDTLS_ERR_SSL_WANT_WRITE,
-                Err(e) => {
-                    dbg!(e);
-                    MBEDTLS_ERR_SSL_INTERNAL_ERROR
-                }
-            }
-        }
-
-        unsafe extern "C" fn bio_recv<S: Read + Write>(
-            ctx: *mut c_void,
-            buf: *mut u8,
-            len: usize,
-        ) -> i32 {
-            let this = &mut *(ctx as *mut TlsStream<S>);
-            match this.stream.read(slice::from_raw_parts_mut(buf, len)) {
-                Ok(n) => n as _,
-                // Err(e) if e.kind() == io::ErrorKind::WouldBlock => MBEDTLS_ERR_SSL_WANT_READ,
-                Err(e) => {
-                    dbg!(e);
-                    MBEDTLS_ERR_SSL_INTERNAL_ERROR
-                }
-            }
-        }
-
         unsafe {
             let mut place = Box::pin(MaybeUninit::<Self>::uninit());
             Self::init_inplace(
                 &mut place,
                 tls_config,
                 stream,
-                Some(bio_send::<S>),
-                Some(bio_recv::<S>),
+                Some(Self::bio_send),
+                Some(Self::bio_recv),
             );
             place.assume_init_ref();
             std::mem::transmute(place)
@@ -334,16 +322,16 @@ impl<S: Read + Write + Unpin> TlsStream<S> {
 impl<S: Read> Read for TlsStream<S> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         unsafe {
-            let ret = mbedtls_ssl_read(&mut self.ssl as *mut _, buf.as_mut_ptr(), buf.len());
-            match ret {
+            let code = mbedtls_ssl_read(&mut self.ssl as *mut _, buf.as_mut_ptr(), buf.len());
+            match code {
                 // MBEDTLS_ERR_SSL_WANT_READ => Err(io::Error::from(io::ErrorKind::WouldBlock)),
                 // MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY => Err(io::Error::new(io::ErrorKind::Other,"MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY")),
                 // question: <= 0 or < 0 ?
-                _ if ret < 0 => Err(io::Error::new(
-                    io::ErrorKind::Other,
-                    mbedtls_err::err_name(ret),
-                )),
-                _ => Ok(ret as _),
+                _ if code < 0 => {
+                    let err_name = mbedtls_err::err_name(code);
+                    Err(io::Error::new(io::ErrorKind::Other, err_name))
+                }
+                _ => Ok(code as _),
             }
         }
     }
@@ -352,14 +340,14 @@ impl<S: Read> Read for TlsStream<S> {
 impl<S: Write> Write for TlsStream<S> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         unsafe {
-            let ret = mbedtls_ssl_write(&mut self.ssl as *mut _, buf.as_ptr(), buf.len());
-            match ret {
+            let code = mbedtls_ssl_write(&mut self.ssl as *mut _, buf.as_ptr(), buf.len());
+            match code {
                 // MBEDTLS_ERR_SSL_WANT_WRITE => Err(io::Error::from(io::ErrorKind::WouldBlock)),
-                _ if ret < 0 => Err(io::Error::new(
-                    io::ErrorKind::Other,
-                    mbedtls_err::err_name(ret),
-                )),
-                _ => Ok(ret as _),
+                _ if code < 0 => {
+                    let err_name = mbedtls_err::err_name(code);
+                    Err(io::Error::new(io::ErrorKind::Other, err_name))
+                }
+                _ => Ok(code as _),
             }
         }
     }
@@ -376,57 +364,50 @@ impl<S: AsyncRead + AsyncWrite + Unpin> TlsStream<S> {
     ///
     /// Must be called with `context` set to a valid pointer to a live `Context` object, and the
     /// wrapper must be pinned in memory.
-    unsafe fn parts(&mut self) -> (Pin<&mut S>, &mut Context<'_>) {
+    unsafe fn parts(&mut self) -> (Pin<&mut S>, &mut Context) {
         debug_assert_ne!(self.context, 0);
         let stream = Pin::new_unchecked(&mut self.stream);
         let context = &mut *(self.context as *mut _);
         (stream, context)
     }
 
+    unsafe extern "C" fn bio_send_async(ctx: *mut c_void, buf: *const u8, len: usize) -> i32 {
+        let this = &mut *(ctx as *mut Self);
+        let (stream, context) = this.parts();
+        let write_buf = slice::from_raw_parts(buf, len);
+        match stream.poll_write(context, write_buf) {
+            Poll::Pending => MBEDTLS_ERR_SSL_WANT_WRITE,
+            Poll::Ready(Ok(n)) => n as _,
+            Poll::Ready(Err(e)) => {
+                dbg!(e);
+                MBEDTLS_ERR_SSL_INTERNAL_ERROR
+            }
+        }
+    }
+
+    unsafe extern "C" fn bio_recv_async(ctx: *mut c_void, buf: *mut u8, len: usize) -> i32 {
+        let this = &mut *(ctx as *mut Self);
+        let (stream, context) = this.parts();
+        let mut read_buf = ReadBuf::uninit(slice::from_raw_parts_mut(buf as _, len));
+        match stream.poll_read(context, &mut read_buf) {
+            Poll::Pending => MBEDTLS_ERR_SSL_WANT_READ,
+            Poll::Ready(Ok(())) => read_buf.filled().len() as _,
+            Poll::Ready(Err(e)) => {
+                dbg!(e);
+                MBEDTLS_ERR_SSL_INTERNAL_ERROR
+            }
+        }
+    }
+
     pub fn new_async(tls_config: Pin<Arc<TlsConfig>>, stream: S) -> Pin<Box<Self>> {
-        unsafe extern "C" fn bio_send<S: AsyncRead + AsyncWrite + Unpin>(
-            ctx: *mut c_void,
-            buf: *const u8,
-            len: usize,
-        ) -> i32 {
-            let this = &mut *(ctx as *mut TlsStream<S>);
-            let (stream, context) = this.parts();
-            match stream.poll_write(context, slice::from_raw_parts(buf, len)) {
-                Poll::Pending => MBEDTLS_ERR_SSL_WANT_WRITE,
-                Poll::Ready(Err(e)) => {
-                    dbg!(e);
-                    MBEDTLS_ERR_SSL_INTERNAL_ERROR
-                }
-                Poll::Ready(Ok(n)) => n as _,
-            }
-        }
-
-        unsafe extern "C" fn bio_recv<S: AsyncRead + AsyncWrite + Unpin>(
-            ctx: *mut c_void,
-            buf: *mut u8,
-            len: usize,
-        ) -> i32 {
-            let this = &mut *(ctx as *mut TlsStream<S>);
-            let (stream, context) = this.parts();
-            let mut read_buf = ReadBuf::uninit(slice::from_raw_parts_mut(buf as _, len));
-            match stream.poll_read(context, &mut read_buf) {
-                Poll::Pending => MBEDTLS_ERR_SSL_WANT_READ,
-                Poll::Ready(Err(e)) => {
-                    dbg!(e);
-                    MBEDTLS_ERR_SSL_INTERNAL_ERROR
-                }
-                Poll::Ready(Ok(())) => read_buf.filled().len() as _,
-            }
-        }
-
         unsafe {
             let mut place = Box::pin(MaybeUninit::<Self>::uninit());
             Self::init_inplace(
                 &mut place,
                 tls_config,
                 stream,
-                Some(bio_send::<S>),
-                Some(bio_recv::<S>),
+                Some(Self::bio_send_async),
+                Some(Self::bio_recv_async),
             );
             place.assume_init_ref();
             std::mem::transmute(place)
@@ -443,26 +424,22 @@ impl<S: AsyncRead + Unpin> AsyncRead for TlsStream<S> {
         self.context = cx as *mut _ as _;
         let ret = unsafe {
             let slice = buf.unfilled_mut();
-            // let slice = {
-            //     let buf = buf.unfilled_mut();
-            //     slice::from_raw_parts_mut(buf.as_mut_ptr().cast::<u8>(), buf.len())
-            // };
-            let ret = mbedtls_ssl_read(
+            let code = mbedtls_ssl_read(
                 &mut self.ssl as *mut _,
                 slice.as_mut_ptr() as _,
                 slice.len(),
             );
-            match ret {
+            match code {
                 MBEDTLS_ERR_SSL_WANT_READ | MBEDTLS_ERR_SSL_WANT_WRITE => Poll::Pending,
                 // MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY => Err(io::Error::new(io::ErrorKind::Other,"MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY")),
                 // question: <= 0 or < 0 ?
-                _ if ret < 0 => {
-                    dbg!(mbedtls_err::err_name(ret));
-                    Poll::Ready(Err(io::Error::new(io::ErrorKind::Other, format!("{ret}"))))
+                _ if code < 0 => {
+                    let err_name = mbedtls_err::err_name(code);
+                    Poll::Ready(Err(io::Error::new(io::ErrorKind::Other, err_name)))
                 }
                 _ => {
-                    buf.assume_init(ret as _);
-                    buf.advance(ret as _);
+                    buf.assume_init(code as _);
+                    buf.advance(code as _);
                     Poll::Ready(Ok(()))
                 }
             }
@@ -478,37 +455,37 @@ impl<S: AsyncWrite + Unpin> AsyncWrite for TlsStream<S> {
         mut self: Pin<&mut Self>,
         cx: &mut Context,
         buf: &[u8],
-    ) -> Poll<Result<usize, io::Error>> {
+    ) -> Poll<io::Result<usize>> {
         self.context = cx as *mut _ as _;
         let ret = unsafe {
-            let ret = mbedtls_ssl_write(&mut self.ssl as *mut _, buf.as_ptr(), buf.len());
-            match ret {
+            let code = mbedtls_ssl_write(&mut self.ssl as *mut _, buf.as_ptr(), buf.len());
+            match code {
                 MBEDTLS_ERR_SSL_WANT_READ | MBEDTLS_ERR_SSL_WANT_WRITE => Poll::Pending,
                 // question: <= 0 or < 0 ?
-                _ if ret < 0 => {
-                    dbg!(mbedtls_err::err_name(ret));
-                    Poll::Ready(Err(io::Error::new(io::ErrorKind::Other, format!("{ret}"))))
+                _ if code < 0 => {
+                    let err_name = mbedtls_err::err_name(code);
+                    Poll::Ready(Err(io::Error::new(io::ErrorKind::Other, err_name)))
                 }
-                _ => Poll::Ready(Ok(ret as usize)),
+                _ => Poll::Ready(Ok(code as usize)),
             }
         };
         self.context = 0;
         ret
     }
 
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), io::Error>> {
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<()>> {
         unsafe { Pin::new_unchecked(&mut self.stream).poll_flush(cx) }
     }
 
-    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), io::Error>> {
+    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<()>> {
         unsafe { Pin::new_unchecked(&mut self.stream).poll_shutdown(cx) }
     }
 }
 
-use hyper::client::connect::Connection;
-use hyper::http::uri::Scheme;
+use hyper::client::connect::{Connected, Connection};
+use hyper::http::uri::{Scheme, Uri};
 use hyper::service::Service;
-use hyper::Uri;
+// use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
 /// A stream which may be wrapped with TLS.
 pub enum MaybeTlsStream<T> {
@@ -559,7 +536,7 @@ impl<T: AsyncWrite + Unpin> AsyncWrite for MaybeTlsStream<T> {
 }
 
 impl<T: Connection> Connection for MaybeTlsStream<T> {
-    fn connected(&self) -> hyper::client::connect::Connected {
+    fn connected(&self) -> Connected {
         match self {
             MaybeTlsStream::Raw(s) => s.connected(),
             MaybeTlsStream::Tls(s) => s.stream.connected(),
