@@ -1,6 +1,7 @@
 use std::ffi::OsStr;
 use std::fmt::Write;
 use std::fs;
+use std::process::Command;
 
 fn main() {
     // https://rust-lang.github.io/rust-bindgen/tutorial-3.html
@@ -16,7 +17,32 @@ fn main() {
         .files(cc_files)
         .compile("mbedtlsmono"); // however, in official guide, it should be spilted into 3 files
 
-    let mut mbedtls_err_rs = "pub fn err_name(code:i32)->&'static str{match code{\n".to_string();
+    // _init();
+}
+
+fn _init() {
+    // 3rdparty/mbedtls
+
+    // src/ffi.rs
+    let mut ffi_rs_data = Vec::new();
+    ffi_rs_data.extend(b"#![allow(warnings)]\n");
+    ffi_rs_data.extend(
+        Command::new("bindgen")
+            .args([
+                "src/mbedtls.h",
+                "--default-macro-constant-type",
+                "signed",
+                "--",
+                "-I3rdparty/mbedtls/include",
+            ])
+            .output()
+            .unwrap()
+            .stdout,
+    );
+    fs::write("src/ffi.rs", ffi_rs_data).unwrap();
+
+    // src/err.rs
+    let mut err_rs_data = "pub fn err_name(code:i32)->&'static str{match code{\n".to_string();
     let err_files = fs::read_dir("3rdparty/mbedtls/include/mbedtls")
         .unwrap()
         .map(|e| e.unwrap().path())
@@ -31,9 +57,9 @@ fn main() {
             parts.next();
             let k = parts.next().unwrap();
             let v = parts.next().unwrap();
-            writeln!(&mut mbedtls_err_rs, "{v} => \"{k}\",").unwrap();
+            writeln!(&mut err_rs_data, "{v} => \"{k}\",").unwrap();
         }
     }
-    mbedtls_err_rs += "_=>\"unknown\"}}";
-    fs::write("src/mbedtls_err.rs", mbedtls_err_rs).unwrap();
+    err_rs_data += "_=>\"unknown\"}}";
+    fs::write("src/err.rs", err_rs_data).unwrap();
 }

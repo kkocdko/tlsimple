@@ -31,18 +31,18 @@ pub mod alpn {
 // https://mbed-tls.readthedocs.io/en/latest/kb/development/thread-safety-and-multi-threading/
 // https://mbed-tls.readthedocs.io/en/latest/kb/how-to/how-do-i-tune-elliptic-curves-resource-usage/?highlight=performance#performance-and-ram-figures
 
-pub struct TlsProfile {
-    entropy: mbedtls_entropy_context,
-    ctr_drbg: mbedtls_ctr_drbg_context,
-    cert: mbedtls_x509_crt,
-    pkey: mbedtls_pk_context,
-    conf: mbedtls_ssl_config,
-    ssl: mbedtls_ssl_context,
-}
+// pub struct TlsProfile {
+//     entropy: mbedtls_entropy_context,
+//     ctr_drbg: mbedtls_ctr_drbg_context,
+//     cert: mbedtls_x509_crt,
+//     pkey: mbedtls_pk_context,
+//     conf: mbedtls_ssl_config,
+//     ssl: mbedtls_ssl_context,
+// }
 
-pub struct TlsConfig2 {
-    cache: Mutex<Vec<Pin<Box<TlsProfile>>>>,
-}
+// pub struct TlsConfig2 {
+//     cache: Mutex<Vec<Pin<Box<TlsProfile>>>>,
+// }
 
 pub struct TlsConfig {
     entropy: mbedtls_entropy_context,
@@ -511,68 +511,15 @@ use hyper::{
 };
 
 #[cfg(feature = "hyper-client")]
-/// A stream which may be wrapped with TLS.
-pub enum MaybeTlsStream<T> {
-    /// Raw stream.
-    Raw(T),
-    /// TLS-wrapped stream.
-    Tls(Pin<Box<TlsStream<T>>>),
-}
-
-#[cfg(feature = "hyper-client")]
-impl<T: AsyncRead + Unpin> AsyncRead for MaybeTlsStream<T> {
-    fn poll_read(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context,
-        buf: &mut ReadBuf,
-    ) -> Poll<io::Result<()>> {
-        match &mut *self {
-            MaybeTlsStream::Raw(s) => Pin::new(s).poll_read(cx, buf),
-            MaybeTlsStream::Tls(s) => Pin::new(s).poll_read(cx, buf),
-        }
-    }
-}
-
-#[cfg(feature = "hyper-client")]
-impl<T: AsyncWrite + Unpin> AsyncWrite for MaybeTlsStream<T> {
-    fn poll_write(
-        mut self: Pin<&mut Self>,
-        ctx: &mut Context,
-        buf: &[u8],
-    ) -> Poll<io::Result<usize>> {
-        match &mut *self {
-            MaybeTlsStream::Raw(s) => Pin::new(s).poll_write(ctx, buf),
-            MaybeTlsStream::Tls(s) => Pin::new(s).poll_write(ctx, buf),
-        }
-    }
-
-    fn poll_flush(mut self: Pin<&mut Self>, ctx: &mut Context) -> Poll<io::Result<()>> {
-        match &mut *self {
-            MaybeTlsStream::Raw(s) => Pin::new(s).poll_flush(ctx),
-            MaybeTlsStream::Tls(s) => Pin::new(s).poll_flush(ctx),
-        }
-    }
-
-    fn poll_shutdown(mut self: Pin<&mut Self>, ctx: &mut Context) -> Poll<io::Result<()>> {
-        match &mut *self {
-            MaybeTlsStream::Raw(s) => Pin::new(s).poll_shutdown(ctx),
-            MaybeTlsStream::Tls(s) => Pin::new(s).poll_shutdown(ctx),
-        }
-    }
-}
-
-#[cfg(feature = "hyper-client")]
-impl<T: Connection> Connection for MaybeTlsStream<T> {
+impl<S: Connection> Connection for TlsStream<S> {
     fn connected(&self) -> Connected {
-        match self {
-            MaybeTlsStream::Raw(s) => s.connected(),
-            MaybeTlsStream::Tls(s) => s.stream.connected(),
-        }
+        self.stream.connected()
     }
 }
 
 #[cfg(feature = "hyper-client")]
 #[derive(Clone)]
+/// Unlike hyper-rustls, this one is always force-https.
 pub struct HttpsConnector<T> {
     http: T,
     tls_config: Pin<Arc<TlsConfig>>,
@@ -585,45 +532,38 @@ impl<T> HttpsConnector<T> {
     }
 }
 
+// trait AA=AsyncRead + AsyncWrite + Connection + Send;
+
 #[cfg(feature = "hyper-client")]
 impl<S> Service<Uri> for HttpsConnector<S>
 where
-    S: Service<Uri> + Send,
-    S::Error: Error + Send + Sync,
-    S::Future: Send + Unpin + 'static,
-    S::Response: AsyncRead + AsyncWrite + Connection + Send + Unpin,
+    S: Service<Uri>,
+    S::Error: Into<Box<dyn Error + Send + Sync>>,
+    S::Future: Send + 'static,
+    S::Response: AsyncRead + AsyncWrite + Connection + Send + Unpin + 'static,
 {
-    type Response = MaybeTlsStream<S::Response>;
+    type Response = TlsStream<S::Response>;
+    // type Response = Pin<Box<dyn Connection + Send>>;
     type Error = S::Error;
+    // type Error = Box<dyn Error + Sync + Send>;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
 
     fn poll_ready(&mut self, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
         self.http.poll_ready(cx)
+        // self.http.poll_ready(cx).map_err(Into::into)
     }
 
     fn call(&mut self, uri: Uri) -> Self::Future {
         let is_tls = uri.scheme() == Some(&Scheme::HTTPS);
         let connect = self.http.call(uri);
-        // use std::future::poll_fn;
-        // use std::future::PollFn;
-        // use std::task::ready;
-        // let code = poll_fn(|cx| {
-        //     let conn = ready!(Pin::new(&mut connect).poll(cx))?;
-        //     Poll::Ready(Ok(MaybeTlsStream::Tls(TlsStream::new_async(
-        //         tls_config, conn,
-        //     ))))
-        // });
-        if is_tls {
-            let tls_config = self.tls_config.clone();
-            Box::pin(async move {
-                let conn = connect.await?;
-                Ok(MaybeTlsStream::Tls(TlsStream::new_async(tls_config, conn)))
-            })
-        } else {
-            Box::pin(async move {
-                let conn = connect.await?;
-                Ok(MaybeTlsStream::Raw(conn))
-            })
-        }
+        let tls_config = self.tls_config.clone();
+        todo!()
+        // Box::pin(async move {
+        //     let conn = connect.await?;
+        //     let aa: Pin<Box<dyn Connection + Send>> = TlsStream::new_async(tls_config, conn);
+        //     Ok(aa)
+        //     // todo!()
+        //     // Ok(TlsStream::new_async(tls_config, conn) as _)
+        // })
     }
 }

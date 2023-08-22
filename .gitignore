@@ -1,6 +1,7 @@
 /target/
 /Cargo.lock
 /.vscode/
+/src/ffi.rs
 /src/err.rs
 /3rdparty/
 /3rdparty/*.tar.gz

@@ -58,9 +58,11 @@ https://curl.se/docs/ssl-compared.html
 https://wiki.mozilla.org/Security/Server_Side_TLS
 
 <!--
+cargo run --example exname -- --exoption exarg1 exarg2
+
 cargo install bindgen-cli
 sudo dnf install clang-devel
-bindgen src/mbedtls.h -o src/ffi.rs --default-macro-constant-type signed -- -I3rdparty/mbedtls/include
+bindgen src/mbedtls.h --default-macro-constant-type signed -- -I3rdparty/mbedtls/include >src/ffi.rs
 https://rust-lang.github.io/rust-bindgen/allowlisting.html
 -->
 
