@@ -23,7 +23,6 @@ Simple and tiny TLS supports for Rust (Async FFI of Mbed TLS).
 - [x] Build Rust executable with AddressSanitizer.
 - [x] Rust binding prototype worked.
 - [x] Fully control the build progress, use only gcc / ar command.
-- [ ] TLS 1.3.
 - [x] Fix LeakSanitizer.
 - [ ] Test if C demo works in Windows.
 - [x] Compile with the Rust cc crate.
@@ -35,10 +34,13 @@ Simple and tiny TLS supports for Rust (Async FFI of Mbed TLS).
 - [ ] Client mode cert vertify.
 - [x] Client with Hyper.
 - [x] Deploy on Tokio current-thread runtime.
-- [ ] Fix crach on Tokio multi-thread runtime.
-- [ ] Bench OpenSSL and Mbed TLS.
+- [x] Fix crach on Tokio multi-thread runtime.
+- [x] Bench OpenSSL and Mbed TLS.
 - [x] Strip more.
+- [ ] TLS 1.3.
 - [ ] Use mbedtls_ssl_cache_context to speed up.
+- [ ] Improve multi-thread performance.
+- [x] Bench OpenSSL and Mbed TLS.
 - [ ] Kernel TLS offload?
 - [ ] Deploy.
 - [ ] Publish & Announce.
@@ -58,7 +60,7 @@ https://wiki.mozilla.org/Security/Server_Side_TLS
 <!--
 cargo install bindgen-cli
 sudo dnf install clang-devel
-bindgen src/mbedtls.h -o src/mbedtls_h.rs --default-macro-constant-type signed -- -I3rdparty/mbedtls/include
+bindgen src/mbedtls.h -o src/ffi.rs --default-macro-constant-type signed -- -I3rdparty/mbedtls/include
 https://rust-lang.github.io/rust-bindgen/allowlisting.html
 -->
 
@@ -94,7 +96,6 @@ cd openssl
 rm -rf test doc demos CHANGES.md
 tar -cJf openssl.tar.xz openssl
 -->
-
 
 <!--
 https://mbed-tls.readthedocs.io/projects/api/en/development/api/file/net__sockets_8h/#net__sockets_8h_1a4841afd0e14f1fd44b82c3a850961ab7

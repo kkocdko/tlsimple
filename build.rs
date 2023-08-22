@@ -12,41 +12,28 @@ fn main() {
     cc::Build::new()
         .include("3rdparty/mbedtls/include")
         .include("src")
-        .define("MBEDTLS_CONFIG_FILE", "<mbedtls_config_custom.h>")
+        .define("MBEDTLS_CONFIG_FILE", "<stddef.h>")
         .files(cc_files)
-        .compile("mbedtlsmono");
+        .compile("mbedtlsmono"); // however, in official guide, it should be spilted into 3 files
 
-    let mut match_block = "pub fn err_name(code:i32)->&'static str{match code{\n".to_string();
+    let mut mbedtls_err_rs = "pub fn err_name(code:i32)->&'static str{match code{\n".to_string();
     let err_files = fs::read_dir("3rdparty/mbedtls/include/mbedtls")
         .unwrap()
         .map(|e| e.unwrap().path())
         .filter(|e| e.extension() == Some(OsStr::new("h")));
     for file in err_files {
         let data = fs::read_to_string(file).unwrap();
-        let lines = data
+        let err_def_lines = data
             .split('\n')
             .filter(|e| e.starts_with("#define MBEDTLS_ERR_"))
             .map(|e| e.split_whitespace());
-        for mut parts in lines {
+        for mut parts in err_def_lines {
             parts.next();
             let k = parts.next().unwrap();
             let v = parts.next().unwrap();
-            writeln!(&mut match_block, "{v} => \"{k}\",").unwrap();
+            writeln!(&mut mbedtls_err_rs, "{v} => \"{k}\",").unwrap();
         }
     }
-    match_block += "_=>\"unknown\"}}";
-    fs::write("src/mbedtls_err.rs", match_block).unwrap();
-    // for header
-    //     .map(|e| fs::read_to_string(e).unwrap())
-    //     .collect::<Vec<_>>();
-    // ~/misc/apps/rg '#define MBEDTLS_ERR_'
-
-    // tell cargo to look for libraries in the specified directory
-    // println!("cargo:rustc-link-search=target/mbedtls/library");
-
-    // // tell cargo to tell rustc to link the library.
-    // println!("cargo:rustc-link-lib=mbedtlsmono");
-
-    // tell cargo to invalidate the built crate whenever the wrapper changes
-    // println!("cargo:rerun-if-changed=wrapper.h");
+    mbedtls_err_rs += "_=>\"unknown\"}}";
+    fs::write("src/mbedtls_err.rs", mbedtls_err_rs).unwrap();
 }

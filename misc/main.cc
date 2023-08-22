@@ -6,7 +6,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-#include "mbedtls.h"
+#include "../src/mbedtls.h"
 
 // clang-format off
 const int SERVER_PORT = 11111;

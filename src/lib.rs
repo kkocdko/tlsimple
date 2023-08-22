@@ -8,11 +8,11 @@ use std::pin::Pin;
 use std::ptr;
 use std::slice;
 use std::sync::Arc;
+use std::sync::Mutex;
 use std::task::Context;
 use std::task::Poll;
-
+mod err;
 mod ffi;
-mod mbedtls_err;
 use ffi::*;
 
 pub mod alpn {
@@ -25,6 +25,23 @@ pub mod alpn {
         &[b"http/1.1\0" as _, b"h2\0" as _, ptr::null() as *const u8] as *const _ as _;
     pub const H2H1: *mut *const std::ffi::c_char =
         &[b"h2\0" as _, b"http/1.1\0" as _, ptr::null() as *const u8] as *const _ as _;
+}
+
+// Why not mbedtls_threading_set_alt?
+// https://mbed-tls.readthedocs.io/en/latest/kb/development/thread-safety-and-multi-threading/
+// https://mbed-tls.readthedocs.io/en/latest/kb/how-to/how-do-i-tune-elliptic-curves-resource-usage/?highlight=performance#performance-and-ram-figures
+
+pub struct TlsProfile {
+    entropy: mbedtls_entropy_context,
+    ctr_drbg: mbedtls_ctr_drbg_context,
+    cert: mbedtls_x509_crt,
+    pkey: mbedtls_pk_context,
+    conf: mbedtls_ssl_config,
+    ssl: mbedtls_ssl_context,
+}
+
+pub struct TlsConfig2 {
+    cache: Mutex<Vec<Pin<Box<TlsProfile>>>>,
 }
 
 pub struct TlsConfig {
@@ -55,10 +72,10 @@ impl Drop for TlsConfig {
 
 impl TlsConfig {
     /// Prepare and init inner structs.
-    unsafe fn prepare_init(p: *mut TlsConfig) {
+    unsafe fn prepare_init(place: *mut TlsConfig) {
         macro_rules! p {
             ($field:ident) => {
-                std::ptr::addr_of_mut!((*p).$field)
+                std::ptr::addr_of_mut!((*place).$field)
             };
         }
 
@@ -328,7 +345,7 @@ impl<S: Read> Read for TlsStream<S> {
                 // MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY => Err(io::Error::new(io::ErrorKind::Other,"MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY")),
                 // question: <= 0 or < 0 ?
                 _ if code < 0 => {
-                    let err_name = mbedtls_err::err_name(code);
+                    let err_name = err::err_name(code);
                     Err(io::Error::new(io::ErrorKind::Other, err_name))
                 }
                 _ => Ok(code as _),
@@ -344,7 +361,7 @@ impl<S: Write> Write for TlsStream<S> {
             match code {
                 // MBEDTLS_ERR_SSL_WANT_WRITE => Err(io::Error::from(io::ErrorKind::WouldBlock)),
                 _ if code < 0 => {
-                    let err_name = mbedtls_err::err_name(code);
+                    let err_name = err::err_name(code);
                     Err(io::Error::new(io::ErrorKind::Other, err_name))
                 }
                 _ => Ok(code as _),
@@ -357,8 +374,10 @@ impl<S: Write> Write for TlsStream<S> {
     }
 }
 
+#[cfg(feature = "tokio")]
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
+#[cfg(feature = "tokio")]
 impl<S: AsyncRead + AsyncWrite + Unpin> TlsStream<S> {
     /// # Safety
     ///
@@ -415,6 +434,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> TlsStream<S> {
     }
 }
 
+#[cfg(feature = "tokio")]
 impl<S: AsyncRead + Unpin> AsyncRead for TlsStream<S> {
     fn poll_read(
         mut self: Pin<&mut Self>,
@@ -434,7 +454,7 @@ impl<S: AsyncRead + Unpin> AsyncRead for TlsStream<S> {
                 // MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY => Err(io::Error::new(io::ErrorKind::Other,"MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY")),
                 // question: <= 0 or < 0 ?
                 _ if code < 0 => {
-                    let err_name = mbedtls_err::err_name(code);
+                    let err_name = err::err_name(code);
                     Poll::Ready(Err(io::Error::new(io::ErrorKind::Other, err_name)))
                 }
                 _ => {
@@ -450,6 +470,7 @@ impl<S: AsyncRead + Unpin> AsyncRead for TlsStream<S> {
     }
 }
 
+#[cfg(feature = "tokio")]
 impl<S: AsyncWrite + Unpin> AsyncWrite for TlsStream<S> {
     fn poll_write(
         mut self: Pin<&mut Self>,
@@ -463,7 +484,7 @@ impl<S: AsyncWrite + Unpin> AsyncWrite for TlsStream<S> {
                 MBEDTLS_ERR_SSL_WANT_READ | MBEDTLS_ERR_SSL_WANT_WRITE => Poll::Pending,
                 // question: <= 0 or < 0 ?
                 _ if code < 0 => {
-                    let err_name = mbedtls_err::err_name(code);
+                    let err_name = err::err_name(code);
                     Poll::Ready(Err(io::Error::new(io::ErrorKind::Other, err_name)))
                 }
                 _ => Poll::Ready(Ok(code as usize)),
@@ -482,11 +503,14 @@ impl<S: AsyncWrite + Unpin> AsyncWrite for TlsStream<S> {
     }
 }
 
-use hyper::client::connect::{Connected, Connection};
-use hyper::http::uri::{Scheme, Uri};
-use hyper::service::Service;
-// use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
+#[cfg(feature = "hyper-client")]
+use hyper::{
+    client::connect::{Connected, Connection},
+    http::uri::{Scheme, Uri},
+    service::Service,
+};
 
+#[cfg(feature = "hyper-client")]
 /// A stream which may be wrapped with TLS.
 pub enum MaybeTlsStream<T> {
     /// Raw stream.
@@ -495,6 +519,7 @@ pub enum MaybeTlsStream<T> {
     Tls(Pin<Box<TlsStream<T>>>),
 }
 
+#[cfg(feature = "hyper-client")]
 impl<T: AsyncRead + Unpin> AsyncRead for MaybeTlsStream<T> {
     fn poll_read(
         mut self: Pin<&mut Self>,
@@ -508,6 +533,7 @@ impl<T: AsyncRead + Unpin> AsyncRead for MaybeTlsStream<T> {
     }
 }
 
+#[cfg(feature = "hyper-client")]
 impl<T: AsyncWrite + Unpin> AsyncWrite for MaybeTlsStream<T> {
     fn poll_write(
         mut self: Pin<&mut Self>,
@@ -535,6 +561,7 @@ impl<T: AsyncWrite + Unpin> AsyncWrite for MaybeTlsStream<T> {
     }
 }
 
+#[cfg(feature = "hyper-client")]
 impl<T: Connection> Connection for MaybeTlsStream<T> {
     fn connected(&self) -> Connected {
         match self {
@@ -544,18 +571,21 @@ impl<T: Connection> Connection for MaybeTlsStream<T> {
     }
 }
 
+#[cfg(feature = "hyper-client")]
 #[derive(Clone)]
 pub struct HttpsConnector<T> {
     http: T,
     tls_config: Pin<Arc<TlsConfig>>,
 }
 
+#[cfg(feature = "hyper-client")]
 impl<T> HttpsConnector<T> {
     pub fn new(http: T, tls_config: Pin<Arc<TlsConfig>>) -> Self {
         Self { http, tls_config }
     }
 }
 
+#[cfg(feature = "hyper-client")]
 impl<S> Service<Uri> for HttpsConnector<S>
 where
     S: Service<Uri> + Send,

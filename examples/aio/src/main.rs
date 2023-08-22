@@ -8,7 +8,7 @@ pub const KEY_DER: &[u8] = b"\x30\x82\x04\xbf\x02\x01\x00\x30\x0d\x06\x09\x2a\x8
 const SERVER_ADDR: &str = "127.0.0.1:11111";
 
 async fn run_server_async() {
-    use tlsimple::{TlsConfig, TlsStream};
+    use crate::{TlsConfig, TlsStream};
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
     let tls_config = TlsConfig::new_server(CERT_DER, KEY_DER, None);
