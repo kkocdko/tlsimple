@@ -1,8 +1,5 @@
 #!/bin/sh
 
-# https://frippery.org/files/busybox/busybox-w32-FRP-5181-g5c1a3b00e.exe
-# https://github.com/rmyorston/busybox-w32
-
 cd $(dirname $(realpath $0))
 
 if [ "$1" = "init" ]; then
@@ -40,8 +37,20 @@ if [ "$1" = "run-rust" ]; then
   export RUST_BACKTRACE=1
   export RUSTC_BOOTSTRAP=1
   export RUSTFLAGS=-Zsanitizer=address
-  # ~/misc/apps/mold -run \
-  cargo run --target=x86_64-unknown-linux-gnu
-  # cargo run
+  # export RUSTFLAGS=-Zsanitizer=leak
+  ~/misc/apps/mold -run \
+  cargo run --example demo --target=x86_64-unknown-linux-gnu
+fi
+
+if [ "$1" = "run-rust-bench" ]; then
+  export RUST_BACKTRACE=1
+  export RUSTC_BOOTSTRAP=1
+  ~/misc/apps/mold -run \
+  cargo build --example demo --target=x86_64-unknown-linux-gnu --release
+  rm -rf perf.data
+  perf record -g target/x86_64-unknown-linux-gnu/release/examples/demo
+  # perf report
   # https://doc.rust-lang.org/stable/unstable-book/compiler-flags/sanitizer.html#build-scripts-and-procedural-macros
+  # curl -vvvk --tlsv1.3 https://127.0.0.1:11111
+  # ./bombardier --disableKeepAlives --connections=64 https://127.0.0.1:9304/
 fi
