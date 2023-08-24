@@ -5,3 +5,4 @@
 /src/err.rs
 /3rdparty/
 /3rdparty/*.tar.gz
+/perf.data
