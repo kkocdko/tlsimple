@@ -10,6 +10,13 @@ if [ "$1" = "init" ]; then
   fi
   tar_prefix=`tar -tf mbedtls.tar.gz | head -n1 | sed -e 's/\///g'`
   tar --strip-components 1 -xf mbedtls.tar.gz -C mbedtls $tar_prefix/include $tar_prefix/library
+  cd ..
+  # cargo install bindgen-cli ; sudo dnf install clang-devel
+  echo "#![allow(warnings)]" >src/ffi.rs
+  bindgen src/mbedtls.h --default-macro-constant-type signed -- -I3rdparty/mbedtls/include >>src/ffi.rs
+  echo "pub fn err_name(code:i32)->&'static str{match code{" >src/err.rs
+  grep -rh '#define MBEDTLS_ERR_' 3rdparty/mbedtls/include | awk '{print $3"=>\""$2"\","}' >>src/err.rs
+  echo '_=>"unknown"}}' >>src/err.rs
 fi
 
 if [ "$1" = "run-cpp" ]; then
