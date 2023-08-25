@@ -35,6 +35,8 @@ int main() {
   log(2, "int main");
   int ret = 0;
 
+  // mbedtls_x509_crt_verify();
+
   mbedtls_entropy_context entropy;
   mbedtls_entropy_init(&entropy);
 
