@@ -6,7 +6,10 @@ if [ "$1" = "init" ]; then
   mkdir -p 3rdparty/mbedtls
   cd 3rdparty
   if [ ! -e mbedtls.tar.gz ]; then
-    curl -o mbedtls.tar.gz -L https://github.com/Mbed-TLS/mbedtls/archive/refs/tags/v3.4.1.tar.gz # https://github.com/Mbed-TLS/mbedtls/archive/refs/heads/development.tar.gz
+    curl -o mbedtls.tar.gz -L https://github.com/Mbed-TLS/mbedtls/archive/refs/tags/v3.4.1.tar.gz
+    # https://github.com/Mbed-TLS/mbedtls/archive/refs/tags/v3.4.1.tar.gz
+    # https://github.com/Mbed-TLS/mbedtls/archive/refs/heads/development.tar.gz
+    # https://github.com/Mbed-TLS/mbedtls/archive/41d689f389a51e078e4de0fba20391d9de5d83e6.tar.gz
   fi
   tar_prefix=`tar -tf mbedtls.tar.gz | head -n1 | sed -e 's/\///g'`
   tar --strip-components 1 -xf mbedtls.tar.gz -C mbedtls $tar_prefix/include $tar_prefix/library
@@ -54,8 +57,9 @@ if [ "$1" = "run-rust-bench" ]; then
   export RUSTC_BOOTSTRAP=1
   ~/misc/apps/mold -run \
   cargo build --example demo --target=x86_64-unknown-linux-gnu --release
-  rm -rf perf.data
-  perf record -g target/x86_64-unknown-linux-gnu/release/examples/demo
+  exe_path=target/x86_64-unknown-linux-gnu/release/examples/demo
+  # $exe_path
+  rm -rf perf.data && perf record -g $exe_path
   # perf report
   # https://doc.rust-lang.org/stable/unstable-book/compiler-flags/sanitizer.html#build-scripts-and-procedural-macros
   # curl -vvvk --tlsv1.3 https://127.0.0.1:11111

@@ -1,5 +1,11 @@
 #include "mbedtls/mbedtls_config.h"
 
+// MBEDTLS_RSA_ALT
+// #define MBEDTLS_HAVE_SSE2
+// mbedtls_mpi_core_mla
+// #define MBEDTLS_MPI_WINDOW_SIZE 4 /**< Maximum window size used. */
+// #define MBEDTLS_MPI_MAX_SIZE 2048 /**< Maximum number of bytes for usable MPIs. */
+
 // #define MBEDTLS_THREADING_C
 // #define MBEDTLS_THREADING_PTHREAD
 #define MBEDTLS_DEPRECATED_REMOVED
@@ -7,6 +13,7 @@
 #undef MBEDTLS_DEBUG_C
 #undef MBEDTLS_ERROR_C
 #undef MBEDTLS_NET_C
+#undef MBEDTLS_FS_IO
 #undef MBEDTLS_PEM_PARSE_C
 #undef MBEDTLS_PEM_WRITE_C
 

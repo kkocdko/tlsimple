@@ -51,6 +51,8 @@ Simple and tiny TLS supports for Rust (Async FFI of Mbed TLS).
 tlsimple (174 deps)  =  5783792 Aug 17 19:52 ksite
 rustls (183 deps)    =  6479280 Aug 17 20:10 ksite
 
+./bombardier -a -d 4s -c 96 https://127.0.0.1:9304/
+
 https://frippery.org/files/busybox/busybox-w32-FRP-5181-g5c1a3b00e.exe
 
 https://github.com/rmyorston/busybox-w32

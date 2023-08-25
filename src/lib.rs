@@ -17,21 +17,15 @@ mod ffi;
 use ffi::*;
 
 pub mod alpn {
-    use std::ptr;
     pub struct Alpn(pub(crate) *mut *const std::ffi::c_char);
     unsafe impl Send for Alpn {}
     unsafe impl Sync for Alpn {}
-    pub const H1: Alpn = Alpn(&[b"http/1.1\0" as _, ptr::null() as *const u8] as *const _ as _);
-    pub const H2: Alpn = Alpn(&[b"h2\0" as _, ptr::null() as *const u8] as *const _ as _);
-    pub const H1H2: Alpn =
-        Alpn(&[b"http/1.1\0" as _, b"h2\0" as _, ptr::null() as *const u8] as *const _ as _);
-    pub const H2H1: Alpn =
-        Alpn(&[b"h2\0" as _, b"http/1.1\0" as _, ptr::null() as *const u8] as *const _ as _);
+    const NULL: *const u8 = std::ptr::null();
+    pub const H1: Alpn = Alpn(&[b"http/1.1\0" as _, NULL] as *const _ as _);
+    pub const H2: Alpn = Alpn(&[b"h2\0" as _, NULL] as *const _ as _);
+    pub const H1H2: Alpn = Alpn(&[b"http/1.1\0" as _, b"h2\0" as _, NULL] as *const _ as _);
+    pub const H2H1: Alpn = Alpn(&[b"h2\0" as _, b"http/1.1\0" as _, NULL] as *const _ as _);
 }
-
-// Why not mbedtls_threading_set_alt?
-// https://mbed-tls.readthedocs.io/en/latest/kb/development/thread-safety-and-multi-threading/
-// https://mbed-tls.readthedocs.io/en/latest/kb/how-to/how-do-i-tune-elliptic-curves-resource-usage/?highlight=performance#performance-and-ram-figures
 
 struct Instance {
     entropy: mbedtls_entropy_context,
@@ -42,12 +36,13 @@ struct Instance {
     ssl: mbedtls_ssl_context,
 }
 
+// sure, this's dangerous, please ensure that you wrap this in a Pin
 unsafe impl Send for Instance {}
 unsafe impl Sync for Instance {}
 
 impl Drop for Instance {
     fn drop(&mut self) {
-        println!(">>> {}::drop()", std::any::type_name::<Self>());
+        // println!(">>> {}::drop()", std::any::type_name::<Self>());
         unsafe {
             mbedtls_ssl_free(&mut self.ssl as _);
             mbedtls_ssl_config_free(&mut self.conf as _);
@@ -72,7 +67,20 @@ enum Kind {
 
 pub struct TlsConfig {
     kind: Kind,
-    cache: Mutex<Vec<Pin<Box<Instance>>>>, // 先暴力实现，以后再搞个无锁队列什么的
+    /// Cache pool for Mbed-TLS structs, reuse structs after TlsStream dropped.
+    ///
+    /// # Why
+    ///
+    /// Performance +9%
+    ///
+    /// # Why not `mbedtls_threading_set_alt`
+    ///
+    /// You may be noticed that you can use macro or mbedtls_threading_set_alt to [on Read the Docs](https://mbed-tls.readthedocs.io/en/latest/kb/development/thread-safety-and-multi-threading/)
+    ///
+    /// https://mbed-tls.readthedocs.io/en/latest/kb/how-to/how-do-i-tune-elliptic-curves-resource-usage/
+    ///
+    /// [on GitHub](https://github.com/Mbed-TLS/mbedtls-docs/blob/5d3c541442be63044b26fba425d216cb37504961/kb/development/thread-safety-and-multi-threading.md)
+    cache: Mutex<Vec<Pin<Box<Instance>>>>,
 }
 
 impl TlsConfig {
@@ -92,10 +100,12 @@ impl TlsConfig {
         })
     }
 
+    /// Give back an instance to cache.
     fn return_instance(&self, instance: Pin<Box<Instance>>) {
         self.cache.lock().unwrap().push(instance);
     }
 
+    /// Get an instance, maybe from cache.
     fn get_instance(&self) -> Pin<Box<Instance>> {
         if let Some(mut v) = {
             // TODO: When to drop?
@@ -173,10 +183,10 @@ impl TlsConfig {
                         }
 
                         // limit ciphersuites
-                        static CIPHERSUITES: [i32; 2] =
-                            [MBEDTLS_TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256 as i32, 0];
-                        // only one ciphersuite. must be static here, or AddressSanitizer: heap-use-after-free
-                        mbedtls_ssl_conf_ciphersuites(p!(conf), CIPHERSUITES.as_ptr());
+                        // static CIPHERSUITES: [i32; 2] =
+                        //     [MBEDTLS_TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384 as i32, 0];
+                        // only one ciphersuite. must be static here
+                        // mbedtls_ssl_conf_ciphersuites(p!(conf), CIPHERSUITES.as_ptr());
                     }
                     Kind::Client { ca } => {
                         // apply defaults
@@ -234,14 +244,13 @@ pub struct TlsStream<S> {
 impl<S> Drop for TlsStream<S> {
     fn drop(&mut self) {
         // println!(">>> {}::drop()", std::any::type_name::<Self>());
-        // SAFETY: instance will be drop in TlsConfig
-        // ManuallyDrop::
+        // safety: instance will be drop in TlsConfig
         let instance = unsafe { ManuallyDrop::take(&mut self.instance) };
         self.config.return_instance(instance);
     }
 }
 
-impl<S: Read + Write + Unpin> TlsStream<S> {
+impl<S: Read + Write> TlsStream<S> {
     unsafe extern "C" fn bio_send(p: *mut c_void, buf: *const u8, len: usize) -> i32 {
         let bio = &mut *(p as *mut Bio<S>);
         match bio.stream.write(slice::from_raw_parts(buf, len)) {
@@ -271,9 +280,12 @@ impl<S: Read + Write + Unpin> TlsStream<S> {
             bio: Box::pin(Bio { stream, context: 0 }),
         };
         unsafe {
+            // safety: self.bio is Pin<Box<Bio>>, so what we do is the same of Box::pin
+            let bio = ret.bio.as_mut().get_unchecked_mut();
+            // set the bio
             mbedtls_ssl_set_bio(
                 &mut ret.instance.ssl as _,
-                &mut *ret.bio as *mut _ as _,
+                bio as *mut _ as _,
                 Some(Self::bio_send),
                 Some(Self::bio_recv),
                 None,
@@ -283,14 +295,15 @@ impl<S: Read + Write + Unpin> TlsStream<S> {
     }
 }
 
-impl<S: Read + Write + Unpin> Read for TlsStream<S> {
+impl<S: Read> Read for TlsStream<S> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         unsafe {
             let ssl_p = &mut self.instance.ssl as *mut _;
             let code = mbedtls_ssl_read(ssl_p, buf.as_mut_ptr(), buf.len());
             match code {
+                // FIXME
                 // MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY => Err(io::Error::new(io::ErrorKind::Other,"MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY")),
-                // question: <= 0 or < 0 ?
+                // FIXME: <= 0 or < 0 ?
                 _ if code < 0 => {
                     let err_name = err::err_name(code);
                     Err(io::Error::new(io::ErrorKind::Other, err_name))
@@ -301,7 +314,7 @@ impl<S: Read + Write + Unpin> Read for TlsStream<S> {
     }
 }
 
-impl<S: Read + Write + Unpin> Write for TlsStream<S> {
+impl<S: Write> Write for TlsStream<S> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         unsafe {
             let ssl_p = &mut self.instance.ssl as *mut _;
@@ -317,7 +330,10 @@ impl<S: Read + Write + Unpin> Write for TlsStream<S> {
     }
 
     fn flush(&mut self) -> io::Result<()> {
-        self.bio.stream.flush()
+        unsafe {
+            let bio = self.bio.as_mut().get_unchecked_mut();
+            bio.stream.flush()
+        }
     }
 }
 
@@ -325,23 +341,12 @@ impl<S: Read + Write + Unpin> Write for TlsStream<S> {
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
 #[cfg(feature = "tokio")]
-impl<S: AsyncRead + AsyncWrite + Unpin> TlsStream<S> {
-    // # Safety
-    //
-    // Must be called with `context` set to a valid pointer to a live `Context` object, and the
-    // wrapper must be pinned in memory.
-    // unsafe fn parts(&mut self) -> (Pin<&mut S>, &mut Context) {
-    //     debug_assert_ne!(self.context, 0);
-    //     let stream = Pin::new_unchecked(&mut self.stream);
-    //     let context = &mut *(self.context as *mut _);
-    //     (stream, context)
-    // }
-
+impl<S: AsyncRead + AsyncWrite> TlsStream<S> {
     unsafe extern "C" fn bio_send_async(p: *mut c_void, buf: *const u8, len: usize) -> i32 {
         let bio = &mut *(p as *mut Bio<S>);
         debug_assert_ne!(bio.context, 0);
         let cx = &mut *(bio.context as *mut _);
-        let stream = Pin::new(&mut bio.stream);
+        let stream = Pin::new_unchecked(&mut bio.stream); // safety: it's sync, called in poll_xxx
         let write_buf = slice::from_raw_parts(buf, len);
         match stream.poll_write(cx, write_buf) {
             Poll::Pending => MBEDTLS_ERR_SSL_WANT_WRITE,
@@ -357,7 +362,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> TlsStream<S> {
         let bio = &mut *(p as *mut Bio<S>);
         debug_assert_ne!(bio.context, 0);
         let cx = &mut *(bio.context as *mut _);
-        let stream = Pin::new(&mut bio.stream);
+        let stream = Pin::new_unchecked(&mut bio.stream);
         let mut read_buf = ReadBuf::uninit(slice::from_raw_parts_mut(buf as _, len));
         match stream.poll_read(cx, &mut read_buf) {
             Poll::Pending => MBEDTLS_ERR_SSL_WANT_READ,
@@ -376,9 +381,10 @@ impl<S: AsyncRead + AsyncWrite + Unpin> TlsStream<S> {
             bio: Box::pin(Bio { stream, context: 0 }),
         };
         unsafe {
+            let bio = ret.bio.as_mut().get_unchecked_mut();
             mbedtls_ssl_set_bio(
                 &mut ret.instance.ssl as _,
-                &mut *ret.bio as *mut _ as _,
+                bio as *mut _ as _,
                 Some(Self::bio_send_async),
                 Some(Self::bio_recv_async),
                 None,
@@ -389,18 +395,23 @@ impl<S: AsyncRead + AsyncWrite + Unpin> TlsStream<S> {
 }
 
 #[cfg(feature = "tokio")]
-impl<S: AsyncRead + Unpin> AsyncRead for TlsStream<S> {
+impl<S: AsyncRead> AsyncRead for TlsStream<S> {
     fn poll_read(
         mut self: Pin<&mut Self>,
         cx: &mut Context,
         buf: &mut ReadBuf,
     ) -> Poll<io::Result<()>> {
-        self.bio.context = cx as *mut _ as _;
-        let ret = unsafe {
+        unsafe {
             let slice = buf.unfilled_mut();
             let ssl_p = &mut self.instance.ssl as *mut _;
+
+            let bio = self.bio.as_mut().get_unchecked_mut();
+            bio.context = cx as *mut _ as _; // for the underlying bio_xxx_async
             let code = mbedtls_ssl_read(ssl_p, slice.as_mut_ptr() as _, slice.len());
+            bio.context = 0;
+
             match code {
+                // both WANT_READ and WANT_WRITE are possiable in the handshake stage
                 MBEDTLS_ERR_SSL_WANT_READ | MBEDTLS_ERR_SSL_WANT_WRITE => Poll::Pending,
                 // MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY => Err(io::Error::new(io::ErrorKind::Other,"MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY")),
                 // question: <= 0 or < 0 ?
@@ -414,24 +425,25 @@ impl<S: AsyncRead + Unpin> AsyncRead for TlsStream<S> {
                     Poll::Ready(Ok(()))
                 }
             }
-            // todo!()
-        };
-        self.bio.context = 0;
-        ret
+        }
     }
 }
 
 #[cfg(feature = "tokio")]
-impl<S: AsyncWrite + Unpin> AsyncWrite for TlsStream<S> {
+impl<S: AsyncWrite> AsyncWrite for TlsStream<S> {
     fn poll_write(
         mut self: Pin<&mut Self>,
         cx: &mut Context,
         buf: &[u8],
     ) -> Poll<io::Result<usize>> {
-        self.bio.context = cx as *mut _ as _;
-        let ret = unsafe {
+        unsafe {
             let ssl_p = &mut self.instance.ssl as *mut _;
+
+            let bio = self.bio.as_mut().get_unchecked_mut();
+            bio.context = cx as *mut _ as _;
             let code = mbedtls_ssl_write(ssl_p, buf.as_ptr(), buf.len());
+            bio.context = 0;
+
             match code {
                 MBEDTLS_ERR_SSL_WANT_READ | MBEDTLS_ERR_SSL_WANT_WRITE => Poll::Pending,
                 // question: <= 0 or < 0 ?
@@ -441,21 +453,24 @@ impl<S: AsyncWrite + Unpin> AsyncWrite for TlsStream<S> {
                 }
                 _ => Poll::Ready(Ok(code as usize)),
             }
-        };
-        self.bio.context = 0;
-        ret
+        }
     }
 
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<()>> {
-        Pin::new(&mut self.bio.stream).poll_flush(cx)
+        unsafe {
+            let bio = self.bio.as_mut().get_unchecked_mut();
+            Pin::new_unchecked(&mut bio.stream).poll_flush(cx)
+        }
     }
 
     fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<()>> {
-        Pin::new(&mut self.bio.stream).poll_shutdown(cx)
+        unsafe {
+            let bio = self.bio.as_mut().get_unchecked_mut();
+            Pin::new_unchecked(&mut bio.stream).poll_shutdown(cx)
+        }
     }
 }
 
-/*
 #[cfg(feature = "hyper-client")]
 use hyper::{
     client::connect::{Connected, Connection},
@@ -466,7 +481,7 @@ use hyper::{
 #[cfg(feature = "hyper-client")]
 impl<S: Connection> Connection for TlsStream<S> {
     fn connected(&self) -> Connected {
-        self.stream.connected()
+        self.bio.stream.connected()
     }
 }
 
@@ -475,17 +490,15 @@ impl<S: Connection> Connection for TlsStream<S> {
 /// Unlike hyper-rustls, this one is always force-https.
 pub struct HttpsConnector<T> {
     http: T,
-    tls_config: Pin<Arc<TlsConfig>>,
+    config: Arc<TlsConfig>,
 }
 
 #[cfg(feature = "hyper-client")]
 impl<T> HttpsConnector<T> {
-    pub fn new(http: T, tls_config: Pin<Arc<TlsConfig>>) -> Self {
-        Self { http, tls_config }
+    pub fn new(http: T, config: Arc<TlsConfig>) -> Self {
+        Self { http, config }
     }
 }
-
-// trait AA=AsyncRead + AsyncWrite + Connection + Send;
 
 #[cfg(feature = "hyper-client")]
 impl<S> Service<Uri> for HttpsConnector<S>
@@ -495,30 +508,21 @@ where
     S::Future: Send + 'static,
     S::Response: AsyncRead + AsyncWrite + Connection + Send + Unpin + 'static,
 {
-    // FIXME
     type Response = TlsStream<S::Response>;
-    // type Response = Pin<Box<dyn Connection + Send>>;
     type Error = S::Error;
-    // type Error = Box<dyn Error + Sync + Send>;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
 
     fn poll_ready(&mut self, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
         self.http.poll_ready(cx)
-        // self.http.poll_ready(cx).map_err(Into::into)
     }
 
     fn call(&mut self, uri: Uri) -> Self::Future {
-        let is_tls = uri.scheme() == Some(&Scheme::HTTPS);
+        assert!(uri.scheme() == Some(&Scheme::HTTPS));
         let connect = self.http.call(uri);
-        let tls_config = self.tls_config.clone();
-        todo!()
-        // Box::pin(async move {
-        //     let conn = connect.await?;
-        //     let aa: Pin<Box<dyn Connection + Send>> = TlsStream::new_async(tls_config, conn);
-        //     Ok(aa)
-        //     // todo!()
-        //     // Ok(TlsStream::new_async(tls_config, conn) as _)
-        // })
+        let config = self.config.clone();
+        Box::pin(async move {
+            let conn = connect.await?;
+            Ok(TlsStream::new_async(config, conn))
+        })
     }
 }
-*/
