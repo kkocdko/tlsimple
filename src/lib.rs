@@ -71,17 +71,24 @@ pub struct TlsConfig {
     ///
     /// # Why
     ///
-    /// Performance +9%
+    /// The Mbed-TLS's thread-safety guarantee is not enabled by default, so we use this cache pool mechanism to provide each TlsStream with sole context structs.
     ///
     /// # Why not `mbedtls_threading_set_alt`
     ///
-    /// You may be noticed that you can use macro or mbedtls_threading_set_alt to [on Read the Docs](https://mbed-tls.readthedocs.io/en/latest/kb/development/thread-safety-and-multi-threading/)
+    /// You may be noticed that you can use `threading_pthread` or `threading_alt` according to the docs ([on Read the Docs](https://mbed-tls.readthedocs.io/en/latest/kb/development/thread-safety-and-multi-threading/) or [on GitHub](https://github.com/Mbed-TLS/mbedtls-docs/blob/5d3c541442be63044b26fba425d216cb37504961/kb/development/thread-safety-and-multi-threading.md)).
     ///
-    /// https://mbed-tls.readthedocs.io/en/latest/kb/how-to/how-do-i-tune-elliptic-curves-resource-usage/
+    /// However, it's not perfect:
     ///
-    /// [on GitHub](https://github.com/Mbed-TLS/mbedtls-docs/blob/5d3c541442be63044b26fba425d216cb37504961/kb/development/thread-safety-and-multi-threading.md)
+    /// 1. Weakness. Some parts of Mbed-TLS still doesn't supports thread-safety.
+    /// 2. Low efficiency. Compared to pthread mutex, this cache pool implement brings 9%+ performance improvements.
+    /// 3. Hardness. If you want to skip pthread (for better cross-platform compatibility), reverse-binding Rust's Mutex to C for `mbedtls_threading_set_alt` will be painful.
+    ///
+    /// So, try this one!
     cache: Mutex<Vec<Pin<Box<Instance>>>>,
 }
+
+// TODO
+// https://mbed-tls.readthedocs.io/en/latest/kb/how-to/how-do-i-tune-elliptic-curves-resource-usage/
 
 impl TlsConfig {
     /// Create a config for server.
@@ -102,8 +109,7 @@ impl TlsConfig {
 
     /// Give back an instance to cache.
     fn return_instance(&self, instance: Pin<Box<Instance>>) {
-        // FIXME
-        // self.cache.lock().unwrap().push(instance);
+        self.cache.lock().unwrap().push(instance);
     }
 
     /// Get an instance, maybe from cache.
