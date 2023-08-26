@@ -102,7 +102,8 @@ impl TlsConfig {
 
     /// Give back an instance to cache.
     fn return_instance(&self, instance: Pin<Box<Instance>>) {
-        self.cache.lock().unwrap().push(instance);
+        // FIXME
+        // self.cache.lock().unwrap().push(instance);
     }
 
     /// Get an instance, maybe from cache.
@@ -198,14 +199,13 @@ impl TlsConfig {
                         );
                         assert_eq!(code, 0);
 
-                        // vertify ca
+                        // verify ca
                         if let Some(ca) = ca {
-                            let code = mbedtls_x509_crt_parse(p!(cert), ca.as_ptr(), ca.len());
+                            let code = mbedtls_x509_crt_parse_der(p!(cert), ca.as_ptr(), ca.len());
                             assert_eq!(code, 0);
                             mbedtls_ssl_conf_ca_chain(p!(conf), p!(cert), ptr::null_mut());
-                            // FIXME
-                            // mbedtls_ssl_set_hostname(ssl, hostname);
                         } else {
+                            // no ca specialed, set verify mode to none
                             // in mbedtls docs: server default = NONE, client default = REQUIRED
                             mbedtls_ssl_conf_authmode(p!(conf), MBEDTLS_SSL_VERIFY_NONE);
                         }
@@ -217,7 +217,7 @@ impl TlsConfig {
                 assert_eq!(code, 0);
 
                 uninit.assume_init_ref(); // for the inner `intrinsics::assert_inhabited`;
-                let pinned = Pin::new_unchecked(uninit);
+                let pinned = Pin::new_unchecked(uninit); // do the same as Box::pin
                 std::mem::transmute(pinned) // because MaybeUninit has `#[repr(transparent)]`
             }
         }
@@ -247,6 +247,34 @@ impl<S> Drop for TlsStream<S> {
         // safety: instance will be drop in TlsConfig
         let instance = unsafe { ManuallyDrop::take(&mut self.instance) };
         self.config.return_instance(instance);
+    }
+}
+
+impl<S> TlsStream<S> {
+    pub fn set_hostname(&mut self, mut hostname: String) {
+        unsafe {
+            assert!(hostname.len() < MBEDTLS_SSL_MAX_HOST_NAME_LEN as usize - 1);
+            if !hostname.ends_with('\0') {
+                hostname.push('\0');
+            }
+            let ssl_p = &mut self.instance.ssl as _;
+            let code = mbedtls_ssl_set_hostname(ssl_p, hostname.as_ptr() as _);
+            assert_eq!(code, 0);
+        }
+    }
+
+    pub fn get_ciphersuite(&self) -> &'static str {
+        unsafe {
+            let p = mbedtls_ssl_get_ciphersuite(&self.instance.ssl as _);
+            if p.is_null() {
+                return "";
+            }
+            let mut len = 0;
+            while *p.add(len) != '\0' as _ {
+                len += 1;
+            }
+            std::str::from_utf8(slice::from_raw_parts(p as _, len)).unwrap()
+        }
     }
 }
 
@@ -518,11 +546,17 @@ where
 
     fn call(&mut self, uri: Uri) -> Self::Future {
         assert!(uri.scheme() == Some(&Scheme::HTTPS));
+        let hostname = uri.host().unwrap().to_string();
         let connect = self.http.call(uri);
         let config = self.config.clone();
         Box::pin(async move {
             let conn = connect.await?;
-            Ok(TlsStream::new_async(config, conn))
+            let has_ca = matches!(&config.kind, Kind::Client { ca: Some(_) });
+            let mut stream = TlsStream::new_async(config, conn);
+            if has_ca {
+                stream.set_hostname(hostname);
+            }
+            Ok(stream)
         })
     }
 }

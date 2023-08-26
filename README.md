@@ -37,12 +37,12 @@ Simple and tiny TLS supports for Rust (Async FFI of Mbed TLS).
 - [x] Bench OpenSSL and Mbed TLS.
 - [x] Strip more.
 - [ ] Test if works in Windows.
-- [ ] Use context pool to improve performance.
 - [ ] TLS 1.3.
-- [ ] Use mbedtls_ssl_cache_context to speed up.
-- [ ] Improve multi-thread performance.
-- [x] Bench OpenSSL and Mbed TLS.
-- [ ] Kernel TLS offload?
+- [ ] ~~Use mbedtls_ssl_cache_context to speed up.~~
+- [x] Use context pool to improve performance.
+- [x] Improve multi-thread performance.
+- [x] Bench and compare with OpenSSL / Rustls.
+- [ ] ~~Kernel TLS offload~~.
 - [ ] Deploy.
 - [ ] Publish & Announce.
 

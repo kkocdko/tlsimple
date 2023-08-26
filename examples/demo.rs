@@ -24,7 +24,9 @@ async fn fetch(request: Request<Body>) -> hyper::Result<Response<Body>> {
     use tlsimple::{HttpsConnector, TlsConfig};
     static CLIENT_HTTP: Lazy<Client<HttpConnector>> = Lazy::new(Default::default);
     static CLIENT_HTTPS: Lazy<Client<HttpsConnector<HttpConnector>>> = Lazy::new(|| {
-        webpki_roots::TLS_SERVER_ROOTS.0;
+        // for v in webpki_roots::TLS_SERVER_ROOTS.0 {
+        //     v.spki
+        // }
         let mut http_conn = HttpConnector::new();
         http_conn.enforce_http(false);
         let config = TlsConfig::new_client(None);
