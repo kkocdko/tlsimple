@@ -269,6 +269,10 @@ impl<S> Drop for TlsStream<S> {
 }
 
 impl<S> TlsStream<S> {
+    pub fn close_notify(self) {
+        todo!()
+    }
+
     pub fn set_hostname(&mut self, mut hostname: String) {
         unsafe {
             assert!(hostname.len() < MBEDTLS_SSL_MAX_HOST_NAME_LEN as usize - 1);
