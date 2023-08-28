@@ -1,10 +1,10 @@
 use hyper::body::to_bytes;
 use hyper::server::conn::Http;
-use hyper::Response;
-use hyper::{Body, Request};
+use hyper::{Body, Request, Response};
 use std::future::poll_fn;
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpListener};
+use std::pin::Pin;
 use std::sync::Arc;
 use std::sync::OnceLock;
 use std::thread;
@@ -17,30 +17,9 @@ pub const KEY_DER: &[u8] = b"\x30\x82\x04\xbf\x02\x01\x00\x30\x0d\x06\x09\x2a\x8
 
 const SERVER_ADDR: &str = "127.0.0.1:11111";
 
-async fn fetch(request: Request<Body>) -> hyper::Result<Response<Body>> {
-    use hyper::client::{Client, HttpConnector};
-    use hyper::http::uri::Scheme;
-    use once_cell::sync::Lazy;
-    use tlsimple::{HttpsConnector, TlsConfig};
-    static CLIENT_HTTP: Lazy<Client<HttpConnector>> = Lazy::new(Default::default);
-    static CLIENT_HTTPS: Lazy<Client<HttpsConnector<HttpConnector>>> = Lazy::new(|| {
-        for v in webpki_roots::TLS_SERVER_ROOTS.0 {
-            v.spki;
-        }
-        let mut http_conn = HttpConnector::new();
-        http_conn.enforce_http(false);
-        let config = TlsConfig::new_client(None);
-        Client::builder().build(HttpsConnector::new(http_conn, config))
-    });
-    match request.uri().scheme() {
-        v if v == Some(&Scheme::HTTPS) => CLIENT_HTTPS.request(request).await,
-        _ => CLIENT_HTTP.request(request).await,
-    }
-}
-
 async fn fetch_data(uri: &str) -> Result<Vec<u8>, hyper::Error> {
     let request = Request::get(uri).body(Body::empty()).unwrap();
-    let response = fetch(request).await?;
+    let response = tlsimple::fetch(request).await?;
     to_bytes(response.into_body()).await.map(|v| v.to_vec())
 }
 
@@ -95,7 +74,6 @@ async fn serve_tlsimple(addr: &SocketAddr, svc: axum::Router) {
 
 async fn serve_openssl(addr: &SocketAddr, svc: axum::Router) {
     use openssl::ssl::{Ssl, SslAcceptor, SslMethod};
-    use std::pin::Pin;
     use tokio_openssl::SslStream;
     let cert = openssl::x509::X509::from_der(CERT_DER).unwrap();
     let key = openssl::pkey::PKey::private_key_from_der(KEY_DER).unwrap();
@@ -201,7 +179,7 @@ async fn serve_raw(addr: &SocketAddr, svc: axum::Router) {
     }
 }
 
-async fn run_server_axum() {
+async fn run_server_async_axum() {
     let addr = SocketAddr::from(([0, 0, 0, 0], 9304));
     let app = axum::Router::new()
         .route(
@@ -215,7 +193,7 @@ async fn run_server_axum() {
     // serve_rustls(&addr, app).await;
 }
 
-async fn run_client() {
+async fn run_client_async() {
     let data = fetch_data("https://bing.com").await.unwrap();
     let s = String::from_utf8(data).unwrap();
     println!("{s}");
@@ -228,7 +206,7 @@ fn main() {
         .build()
         .unwrap()
         // .block_on(run_server_axum());
-        .block_on(run_client());
+        .block_on(run_client_async());
 }
 
 // https://github.com/Mbed-TLS/mbedtls/issues/7722
@@ -269,124 +247,6 @@ async fn run_server_async() {
             // stream.shutdown().await.unwrap();
         });
     }
-}
-
-mod async_client {
-    use hyper::body::HttpBody;
-    use hyper::client::HttpConnector;
-    use hyper::Response;
-    use hyper::{Body, Client, Request};
-    use once_cell::sync::Lazy;
-    use tlsimple::HttpsConnector;
-
-    static CLIENT: Lazy<Client<HttpsConnector<HttpConnector>>> = Lazy::new(|| {
-        let mut http_conn = HttpConnector::new();
-        http_conn.enforce_http(false); // allow HTTPS
-        use tlsimple::TlsConfig;
-        let tls_config = TlsConfig::new_client(None);
-        let connector = HttpsConnector::new(http_conn, tls_config);
-        Client::builder().build(connector)
-    });
-
-    /// Same as JavaScript's `encodeURI`.
-    pub fn encode_uri(i: &str) -> String {
-        const fn gen_table() -> [bool; TABLE_LEN] {
-            let mut table = [false; TABLE_LEN];
-            let valid_chars =
-            b"!#$&'()*+,-./0123456789:;=?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[]_abcdefghijklmnopqrstuvwxyz~";
-            let mut i = 0;
-            while i < valid_chars.len() {
-                table[valid_chars[i] as usize] = true;
-                i += 1;
-            }
-            table
-        }
-
-        const TABLE_LEN: usize = u8::MAX as usize + 1; // == 256
-        const IS_VALID: [bool; TABLE_LEN] = gen_table();
-
-        fn to_hex(d: u8) -> u8 {
-            match d {
-                0..=9 => d + b'0',
-                10..=255 => d - 10 + b'a', // regardless of upper or lower case
-            }
-        }
-
-        let mut o = Vec::with_capacity(i.len());
-        for b in i.as_bytes() {
-            if IS_VALID[*b as usize] {
-                o.push(*b);
-            } else {
-                o.push(b'%');
-                o.push(to_hex(b >> 4));
-                o.push(to_hex(b & 15));
-            }
-        }
-        unsafe { String::from_utf8_unchecked(o) }
-    }
-
-    pub trait ToRequest {
-        fn into_request(self) -> Request<Body>;
-    }
-    impl ToRequest for Request<Body> {
-        fn into_request(self) -> Request<Body> {
-            self
-        }
-    }
-    impl ToRequest for &str {
-        fn into_request(self) -> Request<Body> {
-            let ret = Request::get(encode_uri(self)).body(Body::empty()).unwrap();
-            ret.into_request()
-        }
-    }
-    impl ToRequest for &String {
-        fn into_request(self) -> Request<Body> {
-            self.as_str().into_request()
-        }
-    }
-
-    /// Read `hyper::Body` into `Vec<u8>`, returns emply if reached the limit size (2 MiB).
-    ///
-    /// Simpler than `hyper::body::to_bytes`.
-    pub async fn read_body(mut body: Body) -> Vec<u8> {
-        // TODO: reimplement?
-        let mut v = Vec::new();
-        while let Some(Ok(bytes)) = body.data().await {
-            v.append(&mut bytes.into());
-            // 2 MiB
-            if v.len() > 2048 * 1024 {
-                v.clear();
-                break;
-            }
-        }
-        v
-    }
-
-    /// Send a `Request` and return the response. Allow both HTTPS and HTTP.
-    ///
-    /// This function is used to replace `reqwest` crate to reduce binary size.
-    /// But unlike `reqwest`, this function dose not follow redirect.
-    pub async fn fetch(request: impl ToRequest) -> Result<Response<Body>, hyper::Error> {
-        CLIENT.request(request.into_request()).await
-    }
-
-    /// Fetch a URI, returns as `Vec<u8>`.
-    pub async fn fetch_data(request: impl ToRequest) -> Result<Vec<u8>, hyper::Error> {
-        // let request = request.into_request();
-        // let a = format!("{}", request.uri());
-        // log!("begin:  {a}");
-        let response = fetch(request).await?;
-        let body = read_body(response.into_body()).await;
-        // log!("finish: {a}");
-        Ok(body)
-    }
-}
-
-async fn run_client_async() {
-    use async_client::fetch_data;
-    let a = fetch_data("https://127.0.0.1:9304").await.unwrap();
-    let d = String::from_utf8_lossy(&a).into_owned();
-    println!("d = {d}");
 }
 
 fn run_server() {

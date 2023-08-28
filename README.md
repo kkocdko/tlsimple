@@ -6,7 +6,7 @@ Simple and tiny TLS supports for Rust (Async FFI of Mbed TLS).
 
 - In a word: Async Rust binding, use cc crate, needs only a c compiler, supports multi platform.
 
-- Async support. Provide `TlsStream` (for tokio) and `HttpsConnector` (for hyper).
+- Sync / Async support. Provide `TlsStream` (for tokio) and `HttpsConnector` (for hyper).
 
 - Single crate, less dependencies.
 
@@ -30,8 +30,10 @@ Simple and tiny TLS supports for Rust (Async FFI of Mbed TLS).
 - [ ] Miri, Loom, ThreadSanitizer and more.
 - [x] Set ALPN to use HTTP 2.
 - [x] Client mode.
-- [ ] Client mode cert vertify.
-- [x] Client with Hyper.
+- [x] Implement Client mode cert vetify.
+- [ ] Test client mode cert vetify works.
+- [x] Client with Hyper (0.14).
+- [ ] Client with Hyper (1.0 rc).
 - [x] Deploy on Tokio current-thread runtime.
 - [x] Fix crach on Tokio multi-thread runtime.
 - [x] Bench OpenSSL and Mbed TLS.
@@ -42,6 +44,8 @@ Simple and tiny TLS supports for Rust (Async FFI of Mbed TLS).
 - [x] Use context pool to improve performance.
 - [x] Improve multi-thread performance.
 - [x] Bench and compare with OpenSSL / Rustls.
+- [ ] Better error code to name convert.
+- [ ] CI by GitHub Actions.
 - [ ] ~~Kernel TLS offload~~.
 - [ ] Deploy.
 - [ ] Publish & Announce.
