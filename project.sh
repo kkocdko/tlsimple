@@ -48,8 +48,10 @@ if [ "$1" = "run-rust" ]; then
   export RUSTC_BOOTSTRAP=1
   export RUSTFLAGS=-Zsanitizer=address
   # export RUSTFLAGS=-Zsanitizer=leak
+  op=$2
+  [ "$op" == "" ] && op=run
   ~/misc/apps/mold -run \
-  cargo run --example demo --target=x86_64-unknown-linux-gnu
+  cargo $op --example demo --target=x86_64-unknown-linux-gnu
 fi
 
 if [ "$1" = "run-rust-bench" ]; then

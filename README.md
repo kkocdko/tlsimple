@@ -1,25 +1,21 @@
 # tlsimple
 
-Simple and tiny TLS supports for Rust (Async FFI of Mbed TLS).
+Simple and tiny TLS support for Rust, using [Mbed-TLS](https://github.com/Mbed-TLS/mbedtls).
 
-## Goals
+## Features
 
-- In a word: Async Rust binding, use cc crate, needs only a c compiler, supports multi platform.
+- With async and blocking support, server and client mode. Also provide `HttpsConnector` for Hyper client.
 
-- Sync / Async support. Provide `TlsStream` (for tokio) and `HttpsConnector` (for hyper).
+- Lightweight, as a thin layer (< 2K Lines). Few dependencies.
 
-- Single crate, less dependencies.
-
-- Easy to build, without install Perl, autoconf, automake etc.
+- Easy to build, only a C compiler is required. Unlike OpenSSL (require perl + autoconf + automake + many more).
 
 ## Roadmap
 
-- [x] Run OpenSSL demo.
-- [x] Run wolfSSL demo.
-- [x] Run Mbed TLS demo.
-- [x] Use Mbed TLS BIO (I/O abstraction).
-- [x] Try to figure out if Mbed TLS is easy to strip.
-- [x] Build Mbed TLS with AddressSanitizer.
+- [x] Run Mbed-TLS demo.
+- [x] Use Mbed-TLS BIO (I/O abstraction).
+- [x] Try to figure out if Mbed-TLS is easy to strip.
+- [x] Build Mbed-TLS with AddressSanitizer.
 - [x] Build Rust executable with AddressSanitizer.
 - [x] Rust binding prototype worked.
 - [x] Fully control the build progress, use only gcc / ar command.
@@ -32,11 +28,11 @@ Simple and tiny TLS supports for Rust (Async FFI of Mbed TLS).
 - [x] Client mode.
 - [x] Implement Client mode cert vetify.
 - [ ] Test client mode cert vetify works.
-- [x] Client with Hyper (0.14).
-- [ ] Client with Hyper (1.0 rc).
+- [x] Client with Hyper 0.14.
+- [ ] Client with Hyper 1.0 rc.
 - [x] Deploy on Tokio current-thread runtime.
 - [x] Fix crach on Tokio multi-thread runtime.
-- [x] Bench OpenSSL and Mbed TLS.
+- [x] Bench OpenSSL and Mbed-TLS.
 - [x] Strip more.
 - [ ] Test if works in Windows.
 - [ ] TLS 1.3.
@@ -45,10 +41,24 @@ Simple and tiny TLS supports for Rust (Async FFI of Mbed TLS).
 - [x] Improve multi-thread performance.
 - [x] Bench and compare with OpenSSL / Rustls.
 - [ ] Better error code to name convert.
-- [ ] CI by GitHub Actions.
+- [x] CI by GitHub Actions.
 - [ ] ~~Kernel TLS offload~~.
-- [ ] Deploy.
+- [x] Deploy on ksite.
 - [ ] Publish & Announce.
+
+## Build
+
+<!-- To reduce the repo size, we use fetched -->
+
+## Thanks
+
+- https://github.com/Mbed-TLS/mbedtls
+
+- https://github.com/tokio-rs/tokio-openssl
+
+- https://github.com/fortanix/rust-mbedtls
+
+- https://curl.se/docs/ssl-compared.html
 
 <!--
 

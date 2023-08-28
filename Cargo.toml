@@ -1,11 +1,15 @@
 [package]
 name = "tlsimple"
-description = "Simple and tiny TLS supports for Rust (Async FFI of Mbed TLS)."
-version = "0.1.5"
+description = "Simple and tiny TLS support for Rust, using Mbed-TLS."
+repository = "https://github.com/kkocdko/tlsimple"
+version = "0.2.0"
 edition = "2021"
 license = "MIT"
 
 include = ["/build.rs", "/src", "/3rdparty", "!/3rdparty/mbedtls.tar.gz"]
+
+[lib]
+doctest = false # bindgen generated docs includes invalid markdown syntax
 
 [features]
 default = ["hyper-client"]
@@ -15,17 +19,17 @@ hyper-client = ["tokio", "dep:hyper"]
 [dependencies]
 tokio = { version = "1", optional = true }
 hyper = { version = "0.14", features = ["tcp", "client", "http1"], optional = true }
-webpki-roots = { version = "0.25", optional = true }
 
 [dev-dependencies]
 once_cell = "1"
 tokio = { version = "1", features = ["rt-multi-thread", "net", "io-util"] }
 axum = { version = "0.6", default-features = false, features = ["http1", "http2", "tokio"] }
 tower-service = "0.3"
+webpki-roots = "0.25"
+# webpki-roots = { version = "0.25", optional = true }
 
 hyper-rustls = { version = "0.24", default-features = false }
 tokio-rustls = "0.24"
-webpki-roots = "0.23"
 
 tokio-openssl = "0.6"
 openssl = { version = "0.10", features = ["vendored"] }

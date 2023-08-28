@@ -254,5 +254,10 @@ fn main() {
         .block_on(run_client_async());
 }
 
+#[test]
+fn main_test() {
+    // do tests here
+}
+
 // https://github.com/Mbed-TLS/mbedtls/issues/7722
 // https://github.com/sfackler/rust-openssl/blob/9784356/openssl/src/ssl/mod.rs#L3708
