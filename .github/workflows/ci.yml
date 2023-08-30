@@ -2,9 +2,13 @@ name: ci
 on: [push, pull_request]
 jobs:
   ci:
-    runs-on: ubuntu-latest
+    strategy: { matrix: { os: [windows-2022, ubuntu-22.04, macos-13] } }
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
     steps:
-      - name: Git Clone
-        run: git clone --depth=1 $GITHUB_SERVER_URL/$GITHUB_REPOSITORY .
-      - name: Cargo Test
-        run: rustup show ; sh ./project.sh init ; sh ./project.sh run-rust test
+      - name: Git checkout
+        uses: actions/checkout@v3
+      - name: Show Rust toolchain versions
+        run: rustup show
+      - name: Cargo test
+        run: cargo test --example demo

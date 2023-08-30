@@ -4,8 +4,7 @@ use hyper::{Body, Request};
 use std::future::poll_fn;
 use std::io::{Read, Write};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-use std::pin::Pin;
-use std::sync::{Arc, OnceLock};
+use std::sync::OnceLock;
 use std::thread;
 use std::time::Duration;
 use tlsimple::{alpn, TlsConfig, TlsStream};
@@ -117,8 +116,10 @@ pub async fn serve_tlsimple(addr: &SocketAddr, svc: axum::Router) {
     }
 }
 
+#[cfg(feature = "non-existent")]
 pub async fn serve_openssl(addr: &SocketAddr, svc: axum::Router) {
     use openssl::ssl::{Ssl, SslAcceptor, SslMethod};
+    use std::pin::Pin;
     use tokio_openssl::SslStream;
     let cert = openssl::x509::X509::from_der(CERT_DER).unwrap();
     let key = openssl::pkey::PKey::private_key_from_der(KEY_DER).unwrap();
@@ -159,7 +160,9 @@ pub async fn serve_openssl(addr: &SocketAddr, svc: axum::Router) {
     }
 }
 
+#[cfg(feature = "non-existent")]
 pub async fn serve_rustls(addr: &SocketAddr, svc: axum::Router) {
+    use std::sync::Arc;
     use tokio_rustls::rustls::cipher_suite::*;
     use tokio_rustls::rustls::version::TLS12;
     use tokio_rustls::rustls::{Certificate, PrivateKey, ServerConfig};
@@ -256,7 +259,7 @@ fn main() {
 
 #[test]
 fn main_test() {
-    // do tests here
+    // do tests here, make a server then fetch from server
 }
 
 // https://github.com/Mbed-TLS/mbedtls/issues/7722

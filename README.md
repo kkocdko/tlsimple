@@ -42,6 +42,7 @@ Simple and tiny TLS support for Rust, using [Mbed-TLS](https://github.com/Mbed-T
 - [x] Bench and compare with OpenSSL / Rustls.
 - [ ] Better error code to name convert.
 - [x] CI by GitHub Actions.
+- [ ] Port init script to build.rs.
 - [ ] ~~Kernel TLS offload~~.
 - [x] Deploy on ksite.
 - [ ] Publish & Announce.
@@ -98,5 +99,9 @@ https://github.com/Mbed-TLS/mbedtls/blob/963513dba56991e2c741290841e2f33b9398ea5
 https://github.com/Mbed-TLS/mbedtls/blob/development/programs/ssl/mini_client.c
 
 https://github.com/sfackler/hyper-openssl/blob/master/src/lib.rs
+
+https://mbed-tls.readthedocs.io/projects/api/en/development/api/file/x509__crt_8h/#:~:text=int%20mbedtls_x509_crt_verify(mbedtls_x509_crt
+
+https://github.com/travis-ci/travis-ci/issues/4704#issuecomment-348435959
 
 -->

@@ -1,4 +1,0 @@
-BasedOnStyle: LLVM
-# https://clang.llvm.org/docs/ClangFormatStyleOptions.html#alignafteropenbracket
-# AlignAfterOpenBracket: BlockIndent
-ColumnLimit: 140
