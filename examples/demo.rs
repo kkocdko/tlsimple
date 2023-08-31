@@ -51,7 +51,7 @@ pub fn run_server() {
             write_buf += "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\nHello world! ciphersuite = ";
             write_buf += tls_stream.get_ciphersuite();
             write_buf += "\n";
-            tls_stream.write(write_buf.as_bytes()).unwrap();
+            tls_stream.write_all(write_buf.as_bytes()).unwrap();
             // }
 
             // tls_stream.close_notify();
@@ -67,7 +67,7 @@ pub fn run_client() {
     let mut tls_stream = TlsStream::new_sync(tls_config, &mut stream);
 
     let write_buf = b"GET / HTTP/1.1\r\n\r\n";
-    tls_stream.write(write_buf).unwrap();
+    tls_stream.write_all(write_buf).unwrap();
 
     let mut buf = [0; 4096];
     let len = tls_stream.read(&mut buf).unwrap();
