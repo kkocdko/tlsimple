@@ -42,6 +42,7 @@ Simple and tiny TLS support for Rust, using [Mbed-TLS](https://github.com/Mbed-T
 - [x] Bench and compare with OpenSSL / Rustls.
 - [ ] Better error code to name convert.
 - [x] CI by GitHub Actions.
+- [ ] Handle underlying io errors.
 - [ ] Port init script to build.rs.
 - [ ] ~~Kernel TLS offload~~.
 - [x] Deploy on ksite.

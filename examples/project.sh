@@ -1,6 +1,6 @@
 #!/bin/sh
 
-cd $(dirname $(realpath $0))
+cd $(dirname $(realpath $0)) ; cd ..
 
 if [ "$1" = "run-cpp" ]; then
   mkdir -p target
@@ -26,24 +26,20 @@ fi
 if [ "$1" = "run-rust" ]; then
   export RUST_BACKTRACE=1
   export RUSTC_BOOTSTRAP=1
-  export RUSTFLAGS=-Zsanitizer=address # -Zsanitizer=leak
+  export RUSTFLAGS=-Zsanitizer=address # -Zsanitizer=leak # https://doc.rust-lang.org/stable/unstable-book/compiler-flags/sanitizer.html
   op="$2"
   [ "$op" = "" ] && op=run
-  prefix=""
-  [ -e "$HOME/misc/apps/mold" ] && prefix="$HOME/misc/apps/mold -run"
-  $prefix cargo $op --example demo --target=x86_64-unknown-linux-gnu
+  ~/misc/apps/mold -run \
+  cargo $op --example demo --target=x86_64-unknown-linux-gnu
 fi
 
 if [ "$1" = "run-rust-bench" ]; then
-  export RUST_BACKTRACE=1
-  export RUSTC_BOOTSTRAP=1
   ~/misc/apps/mold -run \
   cargo build --example demo --target=x86_64-unknown-linux-gnu --release
   exe_path=target/x86_64-unknown-linux-gnu/release/examples/demo
   # $exe_path
   rm -rf perf.data && perf record -g $exe_path
   # perf report
-  # https://doc.rust-lang.org/stable/unstable-book/compiler-flags/sanitizer.html#build-scripts-and-procedural-macros
   # curl -vvvk --tlsv1.3 https://127.0.0.1:11111
   # ./bombardier --disableKeepAlives --connections=64 https://127.0.0.1:9304/
 fi
