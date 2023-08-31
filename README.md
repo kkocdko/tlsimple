@@ -42,7 +42,8 @@ Simple and tiny TLS support for Rust, using [Mbed-TLS](https://github.com/Mbed-T
 - [x] Bench and compare with OpenSSL / Rustls.
 - [ ] Better error code to name convert.
 - [x] CI by GitHub Actions.
-- [ ] Handle underlying io errors.
+- [x] Handle underlying io errors.
+- [ ] More about close notify?
 - [ ] Port init script to build.rs.
 - [ ] ~~Kernel TLS offload~~.
 - [x] Deploy on ksite.
@@ -106,3 +107,18 @@ https://mbed-tls.readthedocs.io/projects/api/en/development/api/file/x509__crt_8
 https://github.com/travis-ci/travis-ci/issues/4704#issuecomment-348435959
 
 -->
+
+<details>
+<summary>简体中文</summary>
+
+> tlsimple
+
+为 Rust 提供轻巧的 TLS 支持，基于 [Mbed-TLS](https://github.com/Mbed-TLS/mbedtls)。
+
+## 特性
+
+- 支持异步与同步，服务端与客户端模式。同时为 Hyper 客户端提供 `HttpsConnector`。
+
+> 翻译仍在进行中...
+
+</details>

@@ -1,5 +1,5 @@
 use std::error::Error;
-use std::ffi::c_void;
+use std::ffi::{c_int, c_uchar, c_void};
 use std::future::Future;
 use std::io;
 use std::io::{Read, Write};
@@ -15,6 +15,7 @@ use std::task::Context;
 use std::task::Poll;
 mod err;
 mod ffi;
+use err::*;
 use ffi::*;
 
 pub mod alpn {
@@ -216,7 +217,7 @@ impl TlsConfig {
                                 let code = mbedtls_x509_crt_parse(p!(cert), ca.as_ptr(), ca.len());
                                 // dbg!(code);
                                 // dbg!(MBEDTLS_ERR_X509_UNKNOWN_OID);
-                                // dbg!(err::err_name(code));
+                                // dbg!(err_name(code));
                                 assert_eq!(code, 0);
                             }
                             // FIXME
@@ -243,19 +244,20 @@ impl TlsConfig {
 }
 
 struct Bio<S> {
-    /// Origin stream
+    /// Origin stream.
     stream: S,
-    /// Async context pointer, but store as usize
+    /// Async context pointer, but store as usize.
     context: usize,
-    // error: io::Result<()>, // maybe the last error of origin stream
+    /// Last error of origin stream.
+    error: io::Result<()>,
 }
 
 pub struct TlsStream<S> {
-    /// Referance to Config
+    /// Referance to Config.
     config: Arc<TlsConfig>,
-    /// Mbed-TLS structs
+    /// Mbed-TLS structs.
     instance: ManuallyDrop<Pin<Box<Instance>>>,
-    /// BIO
+    /// BIO, an I/O abstraction.
     bio: Pin<Box<Bio<S>>>,
 }
 
@@ -298,6 +300,38 @@ impl<S> TlsStream<S> {
             std::str::from_utf8(slice::from_raw_parts(p as _, len)).unwrap()
         }
     }
+
+    fn create(
+        config: Arc<TlsConfig>,
+        stream: S,
+        f_send: unsafe extern "C" fn(*mut c_void, *const c_uchar, usize) -> c_int,
+        f_recv: unsafe extern "C" fn(*mut c_void, *mut c_uchar, usize) -> c_int,
+    ) -> Self {
+        let mut ret = Self {
+            instance: ManuallyDrop::new(config.get_instance()),
+            config,
+            bio: Box::pin(Bio {
+                stream,
+                context: 0,
+                error: Ok(()),
+            }),
+        };
+        unsafe {
+            // safety: self.bio is Pin<Box<Bio>>, so what we do is the same of Box::pin
+            let bio = ret.bio.as_mut().get_unchecked_mut();
+            let ssl_p = &mut ret.instance.ssl as _;
+            mbedtls_ssl_set_bio(ssl_p, bio as *mut _ as _, Some(f_send), Some(f_recv), None);
+        }
+        ret
+    }
+
+    unsafe fn take_bio_err(&mut self) -> io::Error {
+        let bio = self.bio.as_mut().get_unchecked_mut();
+        let mut err = Ok(());
+        std::mem::swap(&mut bio.error, &mut err); // take out
+        debug_assert!(err.is_err());
+        err.unwrap_err_unchecked()
+    }
 }
 
 impl<S: Read + Write> TlsStream<S> {
@@ -306,7 +340,7 @@ impl<S: Read + Write> TlsStream<S> {
         match bio.stream.write(slice::from_raw_parts(buf, len)) {
             Ok(n) => n as _,
             Err(e) => {
-                dbg!(e);
+                bio.error = Err(e);
                 MBEDTLS_ERR_SSL_INTERNAL_ERROR
             }
         }
@@ -317,48 +351,27 @@ impl<S: Read + Write> TlsStream<S> {
         match bio.stream.read(slice::from_raw_parts_mut(buf, len)) {
             Ok(n) => n as _,
             Err(e) => {
-                dbg!(e);
+                bio.error = Err(e);
                 MBEDTLS_ERR_SSL_INTERNAL_ERROR
             }
         }
     }
 
     pub fn new_sync(config: Arc<TlsConfig>, stream: S) -> Self {
-        let mut ret = Self {
-            instance: ManuallyDrop::new(config.get_instance()),
-            config,
-            bio: Box::pin(Bio { stream, context: 0 }),
-        };
-        unsafe {
-            // safety: self.bio is Pin<Box<Bio>>, so what we do is the same of Box::pin
-            let bio = ret.bio.as_mut().get_unchecked_mut();
-            // set the bio
-            mbedtls_ssl_set_bio(
-                &mut ret.instance.ssl as _,
-                bio as *mut _ as _,
-                Some(Self::bio_send),
-                Some(Self::bio_recv),
-                None,
-            );
-        }
-        ret
+        Self::create(config, stream, Self::bio_send, Self::bio_recv)
     }
 }
 
 impl<S: Read> Read for TlsStream<S> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         unsafe {
-            let ssl_p = &mut self.instance.ssl as *mut _;
-            let code = mbedtls_ssl_read(ssl_p, buf.as_mut_ptr(), buf.len());
+            let code = mbedtls_ssl_read(&mut self.instance.ssl as _, buf.as_mut_ptr(), buf.len());
             match code {
                 // FIXME
                 // MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY => Err(io::Error::new(io::ErrorKind::Other,"MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY")),
-                // FIXME: <= 0 or < 0 ?
-                _ if code < 0 => {
-                    let err_name = err::err_name(code);
-                    Err(io::Error::new(io::ErrorKind::Other, err_name))
-                }
-                _ => Ok(code as _),
+                0.. => Ok(code as _),
+                _ if self.bio.error.is_err() => Err(self.take_bio_err()),
+                _ => Err(io::Error::new(io::ErrorKind::Other, err_name(code))),
             }
         }
     }
@@ -367,14 +380,11 @@ impl<S: Read> Read for TlsStream<S> {
 impl<S: Write> Write for TlsStream<S> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         unsafe {
-            let ssl_p = &mut self.instance.ssl as *mut _;
-            let code = mbedtls_ssl_write(ssl_p, buf.as_ptr(), buf.len());
+            let code = mbedtls_ssl_write(&mut self.instance.ssl as _, buf.as_ptr(), buf.len());
             match code {
-                _ if code < 0 => {
-                    let err_name = err::err_name(code);
-                    Err(io::Error::new(io::ErrorKind::Other, err_name))
-                }
-                _ => Ok(code as _),
+                0.. => Ok(code as _),
+                _ if self.bio.error.is_err() => Err(self.take_bio_err()),
+                _ => Err(io::Error::new(io::ErrorKind::Other, err_name(code))),
             }
         }
     }
@@ -402,7 +412,7 @@ impl<S: AsyncRead + AsyncWrite> TlsStream<S> {
             Poll::Pending => MBEDTLS_ERR_SSL_WANT_WRITE,
             Poll::Ready(Ok(n)) => n as _,
             Poll::Ready(Err(e)) => {
-                dbg!(e);
+                bio.error = Err(e);
                 MBEDTLS_ERR_SSL_INTERNAL_ERROR
             }
         }
@@ -418,29 +428,14 @@ impl<S: AsyncRead + AsyncWrite> TlsStream<S> {
             Poll::Pending => MBEDTLS_ERR_SSL_WANT_READ,
             Poll::Ready(Ok(())) => read_buf.filled().len() as _,
             Poll::Ready(Err(e)) => {
-                dbg!(e);
+                bio.error = Err(e);
                 MBEDTLS_ERR_SSL_INTERNAL_ERROR
             }
         }
     }
 
     pub fn new_async(config: Arc<TlsConfig>, stream: S) -> Self {
-        let mut ret = Self {
-            instance: ManuallyDrop::new(config.get_instance()),
-            config,
-            bio: Box::pin(Bio { stream, context: 0 }),
-        };
-        unsafe {
-            let bio = ret.bio.as_mut().get_unchecked_mut();
-            mbedtls_ssl_set_bio(
-                &mut ret.instance.ssl as _,
-                bio as *mut _ as _,
-                Some(Self::bio_send_async),
-                Some(Self::bio_recv_async),
-                None,
-            );
-        }
-        ret
+        Self::create(config, stream, Self::bio_send_async, Self::bio_recv_async)
     }
 }
 
@@ -461,19 +456,15 @@ impl<S: AsyncRead> AsyncRead for TlsStream<S> {
             bio.context = 0;
 
             match code {
-                // both WANT_READ and WANT_WRITE are possiable in the handshake stage
-                MBEDTLS_ERR_SSL_WANT_READ | MBEDTLS_ERR_SSL_WANT_WRITE => Poll::Pending,
-                // MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY => Err(io::Error::new(io::ErrorKind::Other,"MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY")),
-                // question: <= 0 or < 0 ?
-                _ if code < 0 => {
-                    let err_name = err::err_name(code);
-                    Poll::Ready(Err(io::Error::new(io::ErrorKind::Other, err_name)))
-                }
-                _ => {
+                0.. => {
                     buf.assume_init(code as _);
                     buf.advance(code as _);
                     Poll::Ready(Ok(()))
                 }
+                MBEDTLS_ERR_SSL_WANT_READ | MBEDTLS_ERR_SSL_WANT_WRITE => Poll::Pending, // both WANT_READ and WANT_WRITE are possiable in the handshake stage
+                // MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY => Err(io::Error::new(io::ErrorKind::Other,"MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY")),
+                _ if self.bio.error.is_err() => Poll::Ready(Err(self.take_bio_err())),
+                _ => Poll::Ready(Err(io::Error::new(io::ErrorKind::Other, err_name(code)))),
             }
         }
     }
@@ -495,13 +486,10 @@ impl<S: AsyncWrite> AsyncWrite for TlsStream<S> {
             bio.context = 0;
 
             match code {
+                0.. => Poll::Ready(Ok(code as usize)),
                 MBEDTLS_ERR_SSL_WANT_READ | MBEDTLS_ERR_SSL_WANT_WRITE => Poll::Pending,
-                // question: <= 0 or < 0 ?
-                _ if code < 0 => {
-                    let err_name = err::err_name(code);
-                    Poll::Ready(Err(io::Error::new(io::ErrorKind::Other, err_name)))
-                }
-                _ => Poll::Ready(Ok(code as usize)),
+                _ if self.bio.error.is_err() => Poll::Ready(Err(self.take_bio_err())),
+                _ => Poll::Ready(Err(io::Error::new(io::ErrorKind::Other, err_name(code)))),
             }
         }
     }
