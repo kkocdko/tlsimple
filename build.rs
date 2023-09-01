@@ -5,6 +5,7 @@ use std::process::Command;
 use std::str;
 
 fn main() {
+    // for old windows you need to care about`curl` and `tar` commands
     if fs::metadata("3rdparty/mbedtls").is_err() {
         fs::create_dir_all("3rdparty/mbedtls").unwrap();
         if fs::metadata("3rdparty/mbedtls.tar.gz").is_err() {
@@ -82,11 +83,18 @@ fn main() {
     let cc_files = fs::read_dir("3rdparty/mbedtls/library")
         .unwrap()
         .map(|e| e.unwrap().path())
-        .filter(|e| e.extension() == Some(OsStr::new("c")));
+        .filter(|e| e.extension() == Some(OsStr::new("c")))
+        .filter(|e| {
+            let file_name = e.file_name().unwrap().to_str().unwrap();
+            !["net_sockets", "mps_", "psa_"]
+                .iter()
+                .any(|p| file_name.starts_with(p))
+        });
     cc::Build::new()
         .include("3rdparty/mbedtls/include")
         .include("src")
         .define("MBEDTLS_CONFIG_FILE", "<mbedtls_config_custom.h>")
+        // .ar_flag("-no_warning_for_no_symbols")
         .files(cc_files)
         .compile("mbedtlsmono"); // however, in official guide, it should be spilted into 3 files
 }
