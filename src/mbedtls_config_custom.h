@@ -1,10 +1,11 @@
 #include "mbedtls/mbedtls_config.h"
 
+// /*
 // MBEDTLS_RSA_ALT
 // #define MBEDTLS_HAVE_SSE2
 // mbedtls_mpi_core_mla
-// #define MBEDTLS_MPI_WINDOW_SIZE 4 /**< Maximum window size used. */
-// #define MBEDTLS_MPI_MAX_SIZE 2048 /**< Maximum number of bytes for usable MPIs. */
+// #define MBEDTLS_MPI_WINDOW_SIZE 4 // Maximum window size used.
+// #define MBEDTLS_MPI_MAX_SIZE 2048 // Maximum number of bytes for usable MPIs.
 
 // #define MBEDTLS_THREADING_C
 // #define MBEDTLS_THREADING_PTHREAD
@@ -91,6 +92,6 @@
 // #undef MBEDTLS_SSL_KEEP_PEER_CERTIFICATE // even bigger
 
 // https://github.com/Mbed-TLS/mbedtls/tree/development/configs
-
+// */
 // #define MBEDTLS_SSL_PROTO_TLS1_3
 // #undef MBEDTLS_ECP_DP_SECP384R1_ENABLED

@@ -39,26 +39,28 @@ int main() {
 
   mbedtls_entropy_context entropy;
   mbedtls_entropy_init(&entropy);
-
   mbedtls_ctr_drbg_context ctr_drbg;
   mbedtls_ctr_drbg_init(&ctr_drbg);
+  mbedtls_x509_crt srvcert;
+  mbedtls_x509_crt_init(&srvcert);
+  mbedtls_pk_context pkey;
+  mbedtls_pk_init(&pkey);
+  mbedtls_ssl_config conf;
+  mbedtls_ssl_config_init(&conf);
+  mbedtls_ssl_context ssl;
+  mbedtls_ssl_init(&ssl);
+
   const unsigned char pers[] = "tlsimple";
   ret = mbedtls_ctr_drbg_seed(&ctr_drbg, mbedtls_entropy_func, &entropy, pers, sizeof(pers));
   h(ret == 0, exit(1), "-0x%x", -ret);
 
-  mbedtls_x509_crt srvcert;
-  mbedtls_x509_crt_init(&srvcert);
   // ret = mbedtls_x509_crt_parse_der(&srvcert, CERT_ASN1, sizeof(CERT_ASN1));
   ret = mbedtls_x509_crt_parse(&srvcert, CERT_DER, sizeof(CERT_DER)); // same as _der?
   h(ret == 0, exit(1), "-0x%x", -ret);
 
-  mbedtls_pk_context pkey;
-  mbedtls_pk_init(&pkey);
   ret = mbedtls_pk_parse_key(&pkey, KEY_DER, sizeof(KEY_DER), NULL, 0, mbedtls_ctr_drbg_random, &ctr_drbg);
   h(ret == 0, exit(1), "-0x%x", -ret);
 
-  mbedtls_ssl_config conf;
-  mbedtls_ssl_config_init(&conf);
   ret = mbedtls_ssl_config_defaults(&conf, MBEDTLS_SSL_IS_SERVER, MBEDTLS_SSL_TRANSPORT_STREAM, MBEDTLS_SSL_PRESET_DEFAULT);
   h(ret == 0, exit(1), "-0x%x", -ret);
   mbedtls_ssl_conf_rng(&conf, mbedtls_ctr_drbg_random, &ctr_drbg);
@@ -74,8 +76,6 @@ int main() {
   // const int ciphersuites[]{MBEDTLS_TLS1_3_AES_128_GCM_SHA256, 0}; // only one ciphersuite
   // mbedtls_ssl_conf_ciphersuites(&conf, ciphersuites);
 
-  mbedtls_ssl_context ssl;
-  mbedtls_ssl_init(&ssl);
   ret = mbedtls_ssl_setup(&ssl, &conf);
   h(ret == 0, exit(1), "-0x%x", -ret);
 
@@ -92,14 +92,13 @@ int main() {
     // https://github.com/wolfSSL/wolfssl-examples/blob/master/tls/server-tcp.c
     log(2, "waiting for a connection...");
 
-    // accept client connections
     sockaddr_in clientAddr{};
     socklen_t clientAddrSize = sizeof(clientAddr);
-    int connd = accept(sockfd, (sockaddr *)&clientAddr, &clientAddrSize);
-    h(connd != -1, exit(1), "%d", connd);
+    int conn = accept(sockfd, (sockaddr *)&clientAddr, &clientAddrSize); // accept client connections
+    h(conn != -1, exit(1), "%d", conn);
 
-    mbedtls_ssl_session_reset(&ssl);
-    mbedtls_ssl_set_bio(&ssl, &connd, bio_send, bio_recv, NULL);
+    mbedtls_ssl_session_reset(&ssl); // reusing, unlike openssl
+    mbedtls_ssl_set_bio(&ssl, &conn, bio_send, bio_recv, NULL);
     // mbedtls_ssl_conf_alpn_protocols(mbedtls_ssl_config *conf, const char **protos)
 
     // this seems unnecessary?
@@ -109,52 +108,39 @@ int main() {
     unsigned char buf[256]{};
 
     // read http request
-    do {
-      *buf = {};
-      ret = mbedtls_ssl_read(&ssl, buf, sizeof(buf) - 1); // avoid missing '\0' at the end
-      if (ret == MBEDTLS_ERR_SSL_WANT_READ || ret == MBEDTLS_ERR_SSL_WANT_WRITE)
-        continue;
-      if (ret <= 0) {
-        if (ret == MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY)
-          log(2, "connection was closed gracefully");
-        else
-          log(1, "-0x%x", -ret);
-        break;
-      }
-      log(2, "%d bytes read\n-----\n%s-----", ret, buf);
-    } while (0);
+    *buf = {};
+    ret = mbedtls_ssl_read(&ssl, buf, sizeof(buf) - 1); // avoid missing '\0' at the end
+    if (ret == MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY) {
+      log(2, "connection was closed gracefully");
+      break;
+    }
+    h(ret != 0, exit(1), "ret == 0 is valid however this example does not allow it");
+    h(ret > 0, exit(1), "-0x%x", -ret);
+    log(2, "%d bytes read\n-----\n%s-----", ret, buf);
+    ret = 0;
 
     // write http response
     *buf = {};
     strcat((char *)buf, "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\n");
-    strcat((char *)buf, "Hello world! ciphersuite = ");
     auto cur_chipersuite = mbedtls_ssl_get_ciphersuite(&ssl);
     strcat((char *)buf, cur_chipersuite == NULL ? "none" : cur_chipersuite);
     strcat((char *)buf, "\n");
     int buf_len = strlen((char *)buf);
-    ret = 0;
-    do {
+    while (ret != buf_len) {
       ret = mbedtls_ssl_write(&ssl, buf + ret, buf_len - ret);
-      if (ret == MBEDTLS_ERR_SSL_WANT_READ || ret == MBEDTLS_ERR_SSL_WANT_WRITE)
-        continue;
-      if (ret <= 0) {
-        log(1, "-0x%x", -ret);
-        break;
-      }
+      h(ret >= 0, exit(1), "-0x%x", -ret);
       log(2, "%d bytes written", ret);
-    } while (ret != buf_len);
+    };
 
     // shutdown
     do {
       ret = mbedtls_ssl_close_notify(&ssl); // maybe like shutdown() in Rust?
-      if (ret == MBEDTLS_ERR_SSL_WANT_READ || ret == MBEDTLS_ERR_SSL_WANT_WRITE)
-        continue;
       if (ret < 0) {
         log(1, "-0x%x", -ret);
         break;
       }
     } while (0);
-    close(connd);
+    close(conn);
     // break; // used for leak san
   }
 
