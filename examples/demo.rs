@@ -242,12 +242,18 @@ pub async fn run_server_async_axum() {
 }
 
 pub async fn run_client_async() {
+    // tokio::spawn(async {
+    //     tokio::runtime::Handle::current().
+    //     panic!();
+    // });
+    // tokio::task::local
     let data = fetch_data("https://bing.com").await.unwrap();
     let s = String::from_utf8(data).unwrap();
     println!("{s}");
 }
 
 fn main() {
+    // panic!();
     // return run_client();
     // tokio::runtime::Builder::new_current_thread()
     tokio::runtime::Builder::new_multi_thread()

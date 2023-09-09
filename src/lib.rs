@@ -1,18 +1,13 @@
 use std::error::Error;
 use std::ffi::{c_int, c_uchar, c_void};
 use std::future::Future;
-use std::io;
-use std::io::{Read, Write};
-use std::mem::ManuallyDrop;
-use std::mem::MaybeUninit;
+use std::io::{self, Read, Write};
+use std::mem::{ManuallyDrop, MaybeUninit};
 use std::pin::Pin;
 use std::ptr;
 use std::slice;
-use std::sync::Arc;
-use std::sync::Mutex;
-use std::sync::OnceLock;
-use std::task::Context;
-use std::task::Poll;
+use std::sync::{Arc, Mutex, OnceLock};
+use std::task::{Context, Poll};
 mod err;
 mod ffi;
 use err::*;
@@ -38,9 +33,7 @@ struct Instance {
     ssl: mbedtls_ssl_context,
 }
 
-// sure, this's dangerous, please ensure that you wrap this in a Pin
 unsafe impl Send for Instance {}
-unsafe impl Sync for Instance {}
 
 impl Drop for Instance {
     fn drop(&mut self) {

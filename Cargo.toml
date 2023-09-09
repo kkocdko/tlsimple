@@ -1,6 +1,6 @@
 [package]
 name = "tlsimple"
-description = "Simple and tiny TLS support for Rust, using Mbed-TLS."
+description = "Simple & tiny TLS support for Rust, using Mbed-TLS."
 repository = "https://github.com/kkocdko/tlsimple"
 version = "0.2.2"
 edition = "2021"

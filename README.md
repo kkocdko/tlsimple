@@ -1,14 +1,18 @@
 # tlsimple
 
-Simple and tiny TLS support for Rust, using [Mbed-TLS](https://github.com/Mbed-TLS/mbedtls).
+Simple & tiny TLS support for Rust, using [Mbed-TLS](https://github.com/Mbed-TLS/mbedtls).
 
 ## Features
 
-- With async and blocking support, server and client mode. Also provide `HttpsConnector` for Hyper client.
+- Out of the box. Only a C compiler is required (unlike OpenSSL which needs perl + autoconf + automake + many more).
 
-- Lightweight, as a thin layer (< 2K Lines). Few dependencies.
+- Async and blocking support, server and client mode. Also provide `HttpsConnector` for Hyper (0.14) client.
 
-- Easy to build, only a C compiler is required. Unlike OpenSSL (require perl + autoconf + automake + many more).
+- Lightweight. As a thin layer (< 2K Lines) with few dependencies. Binary size about 700 KiB smaller than rustls, 2 MiB smaller than rust-openssl.
+
+## Performance
+
+WIP
 
 ## Roadmap
 
@@ -34,7 +38,7 @@ Simple and tiny TLS support for Rust, using [Mbed-TLS](https://github.com/Mbed-T
 - [x] Fix crach on Tokio multi-thread runtime.
 - [x] Bench OpenSSL and Mbed-TLS.
 - [x] Strip more.
-- [ ] Test if works in Windows.
+- [x] Test if works in Windows.
 - [ ] TLS 1.3.
 - [ ] ~~Use mbedtls_ssl_cache_context to speed up.~~
 - [x] Use context pool to improve performance.
@@ -44,14 +48,10 @@ Simple and tiny TLS support for Rust, using [Mbed-TLS](https://github.com/Mbed-T
 - [x] CI by GitHub Actions.
 - [x] Handle underlying io errors.
 - [ ] More about close notify?
-- [ ] Port init script to build.rs.
+- [x] Port init script to build.rs.
 - [ ] ~~Kernel TLS offload~~.
 - [x] Deploy on ksite.
 - [ ] Publish & Announce.
-
-## Build
-
-<!-- To reduce the repo size, we use fetched -->
 
 ## Thanks
 
