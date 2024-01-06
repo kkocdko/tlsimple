@@ -1,5 +1,6 @@
 use std::io::{Read, Write};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::str::FromStr;
 use std::thread;
 use std::time::Duration;
 use tlsimple::{alpn, TlsConfig, TlsStream};
@@ -277,22 +278,58 @@ fn main() {
         .block_on(run_client_async());
 }
 
-// #[tokio::test]
-#[cfg(feature = "non-existent")]
+async fn fetch_data(uri: &str) -> Vec<u8> {
+    use http_body_util::BodyExt;
+    use http_body_util::Empty;
+    use hyper::body::Bytes;
+    use hyper::Request;
+    use hyper::Uri;
+    let uri = Uri::from_str(uri).unwrap();
+    let req = Request::builder()
+        .uri(&uri)
+        .header("Host", uri.host().unwrap())
+        .method("GET")
+        .version(http::version::Version::HTTP_11)
+        .body(Empty::<Bytes>::new())
+        .unwrap();
+    let client = tlsimple::Client::default();
+    let mut res = client.fetch(req).await.unwrap();
+    let mut ret=Vec::new();
+    while let Some(next) = res.frame().await {
+        let frame = next.unwrap();
+        if let Some(chunk) = frame.data_ref() {
+            ret.extend_from_slice(&chunk);
+            // ret.append(chunk);
+            // println!("> {}", std::str::from_utf8(&chunk).unwrap())
+        }
+    }
+    ret
+}
+
+#[tokio::test]
+async fn test_client_fetch_remote_tls13() {
+    let url = "https://archlinux.org/packages/extra/x86_64/rust/json/";
+    let response = String::from_utf8(fetch_data(url).await).unwrap();
+    assert!(response.starts_with("{\"pkgname\""));
+    assert!(response.ends_with("}"));
+}
+
+#[tokio::test]
 async fn test_client_fetch_remote() {
     let url = "https://cdnjs.cloudflare.com/ajax/libs/dayjs/1.11.9/locale/en.min.js";
-    let response = String::from_utf8(fetch_data(url).await.unwrap()).unwrap();
+    let response = String::from_utf8(fetch_data(url).await).unwrap();
     assert!(response.starts_with("!function("));
     assert!(response.contains(".dayjs_locale_en="));
     assert!(response.ends_with("}}});"));
 }
 
-// #[tokio::test]
-#[cfg(feature = "non-existent")]
-async fn test_client_fetch_remote_tls13() {
-    let url = "https://archlinux.org/packages/extra/x86_64/rust/json/";
-    let response = String::from_utf8(fetch_data(url).await.unwrap()).unwrap();
-    assert!(response.contains(r#""rust""#));
+#[tokio::test]
+async fn test_client_fetch_remote_2() {
+    let url = "https://cdnjs.cloudflare.com/ajax/libs/dayjs/1.11.9/locale/en.min.js";
+    let response = String::from_utf8(fetch_data(url).await).unwrap();
+    assert!(response.starts_with("!function("));
+    assert!(response.contains(".dayjs_locale_en="));
+    assert!(response.ends_with("}}});"));
 }
 
 #[tokio::test]

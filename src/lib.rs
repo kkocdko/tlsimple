@@ -211,8 +211,9 @@ impl TlsConfig {
                         // verify ca
                         if let Some(ca) = ca {
                             for ca in ca {
-                                assert_eq!(ca.last(), Some(&0), "ca cert data must ends with zero");
-                                let code = mbedtls_x509_crt_parse(p!(cert), ca.as_ptr(), ca.len());
+                                // assert_eq!(ca.last(), Some(&0), "ca cert data must ends with zero");
+                                let code =
+                                    mbedtls_x509_crt_parse_der(p!(cert), ca.as_ptr(), ca.len());
                                 assert_eq!(code, 0);
                             }
                             mbedtls_ssl_conf_ca_chain(p!(conf), p!(cert), ptr::null_mut());
@@ -549,11 +550,6 @@ pub struct Client(Arc<TlsConfig>);
 #[cfg(feature = "hyper-client")]
 impl Client {
     pub fn default() -> Self {
-        // if has_ca {
-        //     stream.set_hostname(hostname);
-        // }
-        // FIXME: verify
-
         // fn cert_from_anchor(anchor: webpki_roots::TrustAnchor) -> Vec<u8> {}
         // for v in webpki_roots::TLS_SERVER_ROOTS { }
 
@@ -564,9 +560,19 @@ impl Client {
                 continue;
             }
             let s = std::fs::read_to_string(entry.path()).unwrap();
-            let mut s = s.into_bytes();
-            s.push(0);
-            ca.push(s);
+            let mut der_base64 = String::new();
+            for line in s.split('\n').skip(1) {
+                if line.starts_with("-----") {
+                    break;
+                    // TODO?
+                }
+                der_base64 += line;
+            }
+            {
+                use base64::{engine::general_purpose, Engine as _};
+                let bytes = general_purpose::STANDARD.decode(der_base64).unwrap();
+                ca.push(bytes);
+            }
         }
         let config = TlsConfig::new_client(Some(ca));
         // let config = TlsConfig::new_client(None);
@@ -624,5 +630,51 @@ impl Client {
         }
 
         unreachable!()
+    }
+}
+
+#[cfg(feature = "tower-server")]
+use {
+    hyper_util::rt::TokioExecutor, std::convert::Infallible, std::future::poll_fn,
+    tokio::io::AsyncWriteExt, tower_service::Service,
+};
+
+#[cfg(feature = "tower-server")]
+pub async fn serve<S>(tls_config: Arc<TlsConfig>, tcp_listener: tokio::net::TcpListener, service: S)
+where
+    S: Service<Request<Incoming>, Response = Response<Incoming>, Error = Infallible>
+        + Clone
+        + Send
+        + 'static,
+    S::Future: Send,
+{
+    loop {
+        let (mut tcp_stream, _socket_addr) = match tcp_listener.accept().await {
+            Ok(v) => v,
+            _ => continue, // ignore error here?
+        };
+        // dbg!(socket_addr);
+        let tls_config = tls_config.clone();
+        let svc = service.clone();
+        let hyper_service = hyper::service::service_fn(move |req| svc.clone().call(req));
+
+        tokio::spawn(async move {
+            // redirect HTTP to HTTPS
+            let mut flag = [0]; // expect 0x16, TLS handshake
+            let mut buf = tokio::io::ReadBuf::new(&mut flag);
+            poll_fn(|cx| tcp_stream.poll_peek(cx, &mut buf)).await.ok();
+            if flag[0] != 0x16 {
+                const TO_HTTPS_PAGE: &[u8] = b"HTTP/1.1 200 OK\r\ncontent-type:text/html\r\n\r\n<script>location=location.href.replace(':','s:')</script>\r\n\r\n\0";
+                tcp_stream.write_all(TO_HTTPS_PAGE).await.ok();
+                tcp_stream.shutdown().await.ok(); // remember to close stream
+                return;
+            }
+            let tls_stream = TlsStream::new_async(tls_config, tcp_stream);
+            let io = TokioIo::new(tls_stream);
+            hyper_util::server::conn::auto::Builder::new(TokioExecutor::new())
+                .serve_connection_with_upgrades(io, hyper_service)
+                .await
+                .ok();
+        });
     }
 }

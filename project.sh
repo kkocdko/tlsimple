@@ -25,6 +25,12 @@ if [ "$1" = "init" ]; then
   exit
 fi
 
+if [ "$1" = "clean" ]; then
+  rm -f src/ffi.rs
+  cargo clean
+  exit
+fi
+
 if [ "$1" = "run-cpp" ]; then
   mkdir -p target
   cd target
@@ -40,7 +46,7 @@ if [ "$1" = "run-cpp" ]; then
     ar r libmbedtlsmono.a *.o
     rm -rf *.o
   fi
-  rm main
+  rm -f main
   mold -run \
   g++ ../examples/main.cc -o main -I../3rdparty/mbedtls/include -L. -lmbedtlsmono $ccflags
   # strip --strip-all main
@@ -49,11 +55,11 @@ if [ "$1" = "run-cpp" ]; then
 fi
 
 if [ "$1" = "run-rust" ]; then
-  export RUST_BACKTRACE="full"
-  export RUSTC_BOOTSTRAP="1"
-  export RUSTFLAGS=-Zsanitizer=address # -Zsanitizer=leak # https://doc.rust-lang.org/stable/unstable-book/compiler-flags/sanitizer.html
+  # export RUST_BACKTRACE="full"
+  # export RUSTC_BOOTSTRAP="1"
+  # export RUSTFLAGS=-Zsanitizer=address # -Zsanitizer=leak # https://doc.rust-lang.org/stable/unstable-book/compiler-flags/sanitizer.html
   mold -run \
-  cargo run --example demo --target=x86_64-unknown-linux-gnu
+  cargo test --example demo --target=x86_64-unknown-linux-gnu
 fi
 
 if [ "$1" = "run-rust-bench" ]; then
