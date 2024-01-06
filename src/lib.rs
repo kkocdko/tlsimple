@@ -1,6 +1,5 @@
 use std::error::Error;
 use std::ffi::{c_int, c_uchar, c_void};
-use std::future::Future;
 use std::io::{self, Read, Write};
 use std::mem::{ManuallyDrop, MaybeUninit};
 use std::pin::Pin;
@@ -8,9 +7,7 @@ use std::ptr;
 use std::slice;
 use std::sync::{Arc, Mutex, OnceLock};
 use std::task::{Context, Poll};
-mod err;
 mod ffi;
-use err::*;
 use ffi::*;
 
 pub mod alpn {
@@ -85,9 +82,17 @@ pub struct TlsConfig {
 // TODO
 // https://mbed-tls.readthedocs.io/en/latest/kb/how-to/how-do-i-tune-elliptic-curves-resource-usage/
 
+fn psa_init() {
+    static INITED: OnceLock<()> = OnceLock::new();
+    INITED.get_or_init(|| unsafe {
+        assert!(psa_crypto_init() == 0);
+    });
+}
+
 impl TlsConfig {
     /// Create a config for server.
     pub fn new_server(cert: Vec<u8>, key: Vec<u8>, alpn: Option<alpn::Alpn>) -> Arc<Self> {
+        psa_init(); // MUST BE CALLED
         Arc::new(Self {
             kind: Kind::Server { cert, key, alpn },
             cache: Mutex::new(Vec::new()),
@@ -96,6 +101,7 @@ impl TlsConfig {
 
     /// Create a config for client.
     pub fn new_client(ca: Option<Vec<Vec<u8>>>) -> Arc<Self> {
+        psa_init(); // MUST BE CALLED
         Arc::new(Self {
             kind: Kind::Client { ca },
             cache: Mutex::new(Vec::new()),
@@ -147,8 +153,8 @@ impl TlsConfig {
                 );
                 assert_eq!(code, 0);
 
-                // conf rng
-                mbedtls_ssl_conf_rng(p!(conf), Some(mbedtls_ctr_drbg_random), p!(ctr_drbg) as _);
+                // // conf rng
+                // mbedtls_ssl_conf_rng(p!(conf), Some(mbedtls_ctr_drbg_random), p!(ctr_drbg) as _);
 
                 // server or client
                 match &self.kind {
@@ -200,19 +206,33 @@ impl TlsConfig {
                         );
                         assert_eq!(code, 0);
 
+                        // conf rng
+                        mbedtls_ssl_conf_rng(
+                            p!(conf),
+                            Some(mbedtls_ctr_drbg_random),
+                            p!(ctr_drbg) as _,
+                        );
+
                         // verify ca
                         if let Some(ca) = ca {
                             // FIXME
-                            for ca in ca {
-                                // mbedtls_x509_crt_ca_cb_t
-                                // mbedtls_pk_parse_public_key(ctx, key, keylen)
-                                // (*p!(cert)).
-                                let code = mbedtls_x509_crt_parse(p!(cert), ca.as_ptr(), ca.len());
-                                // dbg!(code);
-                                // dbg!(MBEDTLS_ERR_X509_UNKNOWN_OID);
-                                // dbg!(err_name(code));
-                                assert_eq!(code, 0);
-                            }
+
+                            let code = mbedtls_x509_crt_parse_path(
+                                p!(cert),
+                                b"/etc/ssl/certs/\0".as_ptr() as _,
+                            );
+                            assert_eq!(code, 0);
+                            // for ca in ca {
+                            //     dbg!(String::from_utf8(ca.clone()).unwrap());
+                            //     // mbedtls_x509_crt_ca_cb_t
+                            //     // mbedtls_pk_parse_public_key(ctx, key, keylen)
+                            //     // (*p!(cert)).
+                            //     let code = mbedtls_x509_crt_parse(p!(cert), ca.as_ptr(), ca.len());
+                            //     // dbg!(code);
+                            //     // dbg!(MBEDTLS_ERR_X509_UNKNOWN_OID);
+                            //     // dbg!(err_name(code));
+                            //     assert_eq!(code, 0);
+                            // }
                             // FIXME
                             // mbedtls_ssl_set_verify(ssl, f_vrfy, p_vrfy)
                             mbedtls_ssl_conf_ca_chain(p!(conf), p!(cert), ptr::null_mut());
@@ -447,6 +467,7 @@ impl<S: AsyncRead> AsyncRead for TlsStream<S> {
             bio.context = cx as *mut _ as _; // for the underlying bio_xxx_async
             let code = mbedtls_ssl_read(ssl_p, slice.as_mut_ptr() as _, slice.len());
             bio.context = 0;
+            dbg!(code);
 
             match code {
                 0.. => {
@@ -470,6 +491,7 @@ impl<S: AsyncWrite> AsyncWrite for TlsStream<S> {
         cx: &mut Context,
         buf: &[u8],
     ) -> Poll<io::Result<usize>> {
+        println!(">>> {}", std::str::from_utf8(buf).unwrap());
         unsafe {
             let ssl_p = &mut self.instance.ssl as *mut _;
 
@@ -477,6 +499,7 @@ impl<S: AsyncWrite> AsyncWrite for TlsStream<S> {
             bio.context = cx as *mut _ as _;
             let code = mbedtls_ssl_write(ssl_p, buf.as_ptr(), buf.len());
             bio.context = 0;
+            dbg!(code, buf.len());
 
             match code {
                 0.. => Poll::Ready(Ok(code as usize)),
@@ -502,114 +525,90 @@ impl<S: AsyncWrite> AsyncWrite for TlsStream<S> {
     }
 }
 
-#[cfg(feature = "hyper-client")]
-use hyper::{
-    client::connect::{Connected, Connection},
-    client::HttpConnector,
-    http::uri::Scheme,
-    service::Service,
-    Body, Client, Request, Response, Uri,
-};
+use http::uri::Scheme;
+use hyper::body::{Body, Incoming};
+use hyper::{Request, Response};
+use hyper_util::rt::tokio::TokioIo;
+use tokio::net::{lookup_host, TcpStream};
 
-#[cfg(feature = "hyper-client")]
-impl<S: Connection> Connection for TlsStream<S> {
-    fn connected(&self) -> Connected {
-        self.bio.stream.connected()
-    }
-}
+pub struct Client(Arc<TlsConfig>);
 
-#[cfg(feature = "hyper-client")]
-#[derive(Clone)]
-/// Unlike hyper-rustls, this one is always force-https.
-pub struct HttpsConnector<T> {
-    http: T,
-    config: Arc<TlsConfig>,
-}
+impl Client {
+    pub fn default() -> Self {
+        // if has_ca {
+        //     stream.set_hostname(hostname);
+        // }
+        // FIXME: verify
+        // std::ascii::escape_default(c)
+        // let mut cas = Vec::new();
+        // cas.push(CC);
+        // Box<'static Trait>
 
-#[cfg(feature = "hyper-client")]
-impl<T> HttpsConnector<T> {
-    pub fn new(http: T, config: Arc<TlsConfig>) -> Self {
-        Self { http, config }
-    }
-}
+        // fn cert_from_anchor(anchor: webpki_roots::TrustAnchor) -> Vec<u8> {}
 
-#[cfg(feature = "hyper-client")]
-impl<S> Service<Uri> for HttpsConnector<S>
-where
-    S: Service<Uri>,
-    S::Error: Into<Box<dyn Error + Send + Sync>>,
-    S::Future: Send + 'static,
-    // although `Connection + Send + ...` isn't necessary here, it's required by hyper::Client
-    S::Response: AsyncRead + AsyncWrite + Connection + Send + Unpin + 'static,
-{
-    type Response = TlsStream<S::Response>;
-    type Error = S::Error;
-    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
-
-    fn poll_ready(&mut self, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
-        self.http.poll_ready(cx)
+        let mut ca = Vec::new();
+        // for entry in std::fs::read_dir("/etc/ssl/certs").unwrap() {
+        //     let entry = entry.unwrap();
+        //     if !entry.metadata().unwrap().is_file() {
+        //         continue;
+        //     }
+        //     let s = std::fs::read_to_string(entry.path()).unwrap();
+        //     ca.push(s.into_bytes());
+        // }
+        // for v in webpki_roots::TLS_SERVER_ROOTS {
+        // }
+        // let config = TlsConfig::new_client(None);
+        let config = TlsConfig::new_client(Some(ca));
+        Self(config)
     }
 
-    fn call(&mut self, uri: Uri) -> Self::Future {
-        assert!(uri.scheme() == Some(&Scheme::HTTPS));
-        let hostname = uri.host().unwrap().to_string();
-        let connect = self.http.call(uri);
-        let config = self.config.clone();
-        let has_ca = matches!(config.kind, Kind::Client { ca: Some(_) });
-        // to be box-less is possible, but the performance bottleneck is not here
-        Box::pin(async move {
-            let conn = connect.await?;
-            let mut stream = TlsStream::new_async(config, conn);
-            if has_ca {
-                stream.set_hostname(hostname);
-            }
-            Ok(stream)
-        })
-    }
-}
+    pub async fn fetch<B>(&self, req: Request<B>) -> Response<Incoming>
+    where
+        B: Body + 'static + Send,
+        B::Data: Send,
+        B::Error: Into<Box<dyn Error + Send + Sync>>,
+    {
+        let uri = req.uri();
+        let scheme = uri.scheme();
+        let host = uri.host().unwrap();
+        let mut host_and_port = String::with_capacity(host.len() + 8);
+        host_and_port += host;
+        host_and_port.push(':');
+        use std::fmt::Write;
+        let port = match uri.port_u16() {
+            Some(port) => port,
+            None if scheme == Some(&Scheme::HTTP) => 80,
+            None if scheme == Some(&Scheme::HTTPS) => 443,
+            None => panic!(),
+        };
+        write!(&mut host_and_port, "{port}");
+        let addr = lookup_host(host_and_port).await.unwrap().next().unwrap();
+        let tcp_stream = TcpStream::connect(addr).await.unwrap();
 
-#[cfg(feature = "hyper-client")]
-/// A `fetch` function which supports both HTTP and HTTPS.
-///
-/// # CAUTIONS
-///
-/// In this moment, this function will **NOT** do CA cert verify.
-pub async fn fetch(request: Request<Body>) -> hyper::Result<Response<Body>> {
-    fn get_client_http() -> &'static Client<HttpConnector> {
-        // TODO: use lazylock when std stable
-        static CLIENT_HTTP: OnceLock<Client<HttpConnector>> = OnceLock::new();
-        CLIENT_HTTP.get_or_init(Default::default)
-    }
-    fn get_client_https() -> &'static Client<HttpsConnector<HttpConnector>> {
-        static CLIENT_HTTPS: OnceLock<Client<HttpsConnector<HttpConnector>>> = OnceLock::new();
-        CLIENT_HTTPS.get_or_init(|| {
-            // FIXME: client verify
-            // std::ascii::escape_default(c)
-            // let mut cas = Vec::new();
-            // cas.push(CC);
-            // Box<'static Trait>
-            // for v in webpki_roots::TLS_SERVER_ROOTS.0 {
-            //     let mut ca = Vec::new();
-            //     ca.extend(b"0\x82...");
-            //     ca.extend(v.subject);
-            //     ca.extend(b"0\x1e\x17\r210115000000Z\x17\r460114235959Z0N");
-            //     ca.extend(v.subject);
-            //     ca.extend(b"0v");
-            //     ca.extend(v.spki);
-            //     ca.extend(b"\xa3B0@...");
-            //     cas.push(ca);
-            //     // v.spki;
-            //     break;
-            // }
-            // let config = TlsConfig::new_client(Some(cas));
-            let config = TlsConfig::new_client(None);
-            let mut http_conn = HttpConnector::new();
-            http_conn.enforce_http(false);
-            Client::builder().build(HttpsConnector::new(http_conn, config))
-        })
-    }
-    match request.uri().scheme() {
-        v if v == Some(&Scheme::HTTPS) => get_client_https().request(request).await,
-        _ => get_client_http().request(request).await,
+        let mut sender = if scheme == Some(&Scheme::HTTP) {
+            let io = TokioIo::new(tcp_stream);
+            let (sender, conn) = hyper::client::conn::http1::handshake(io).await.unwrap();
+            tokio::task::spawn(async move {
+                if let Err(err) = conn.await {
+                    println!("Connection failed: {:?}", err);
+                }
+            });
+            sender
+        } else if uri.scheme() == Some(&Scheme::HTTPS) {
+            let mut stream = TlsStream::new_async(self.0.clone(), tcp_stream);
+            // stream.set_hostname(host.to_string());
+
+            let io = TokioIo::new(stream);
+            let (sender, conn) = hyper::client::conn::http1::handshake(io).await.unwrap();
+            tokio::task::spawn(async move {
+                if let Err(err) = conn.await {
+                    println!("Connection failed: {:?}", err);
+                }
+            });
+            sender
+        } else {
+            todo!()
+        };
+        sender.send_request(req).await.unwrap()
     }
 }

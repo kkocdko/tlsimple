@@ -1,12 +1,12 @@
 [package]
 name = "tlsimple"
-description = "Simple & tiny TLS support for Rust, using Mbed-TLS."
+description = "TLS for async Rust, with Mbed-TLS."
 repository = "https://github.com/kkocdko/tlsimple"
 version = "0.2.2"
 edition = "2021"
 license = "MIT"
 
-include = ["/build.rs", "/src", "/3rdparty", "!/3rdparty/mbedtls.tar.gz"]
+include = ["/src", "/3rdparty/mbedtls/include", "/3rdparty/mbedtls/library"]
 
 [lib]
 doctest = false # bindgen generated docs includes invalid markdown syntax
@@ -14,17 +14,21 @@ doctest = false # bindgen generated docs includes invalid markdown syntax
 [features]
 default = ["hyper-client"]
 tokio = ["dep:tokio"]
-hyper-client = ["tokio", "dep:hyper"]
+hyper-client = ["tokio", "dep:hyper", "dep:http", "dep:hyper-util", "dep:webpki-roots"]
 
 [dependencies]
 tokio = { version = "1", optional = true }
-hyper = { version = "0.14", features = ["tcp", "client", "http1"], optional = true }
+hyper = { version = "1", features = ["full"], optional = true }
+hyper-util = { version = "0.1", features = ["full"], optional = true }
+http = { version = "1", optional = true }
+webpki-roots = { version = "0.26", optional = true }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "net", "io-util", "macros"] }
-axum = { version = "0.6", default-features = false, features = ["http1", "http2", "tokio"] }
-tower-service = "0.3"
-# webpki-roots = "0.25"
+axum = { version = "0.7", default-features = false, features = ["http1", "http2", "tokio"] }
+http-body-util = "0.1"
+
+# tower-service = "0.3"
 # webpki-roots = { version = "0.25", optional = true }
 
 # hyper-rustls = { version = "0.24", default-features = false }
