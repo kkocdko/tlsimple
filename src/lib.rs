@@ -153,8 +153,10 @@ impl TlsConfig {
                 );
                 assert_eq!(code, 0);
 
-                // // conf rng
-                // mbedtls_ssl_conf_rng(p!(conf), Some(mbedtls_ctr_drbg_random), p!(ctr_drbg) as _);
+                // conf rng
+                mbedtls_ssl_conf_rng(p!(conf), Some(mbedtls_ctr_drbg_random), p!(ctr_drbg) as _);
+
+                // mbedtls_ssl_conf_early_data(p!(conf), MBEDTLS_SSL_EARLY_DATA_ENABLED);
 
                 // server or client
                 match &self.kind {
@@ -206,35 +208,13 @@ impl TlsConfig {
                         );
                         assert_eq!(code, 0);
 
-                        // conf rng
-                        mbedtls_ssl_conf_rng(
-                            p!(conf),
-                            Some(mbedtls_ctr_drbg_random),
-                            p!(ctr_drbg) as _,
-                        );
-
                         // verify ca
                         if let Some(ca) = ca {
-                            // FIXME
-
-                            let code = mbedtls_x509_crt_parse_path(
-                                p!(cert),
-                                b"/etc/ssl/certs/\0".as_ptr() as _,
-                            );
-                            assert_eq!(code, 0);
-                            // for ca in ca {
-                            //     dbg!(String::from_utf8(ca.clone()).unwrap());
-                            //     // mbedtls_x509_crt_ca_cb_t
-                            //     // mbedtls_pk_parse_public_key(ctx, key, keylen)
-                            //     // (*p!(cert)).
-                            //     let code = mbedtls_x509_crt_parse(p!(cert), ca.as_ptr(), ca.len());
-                            //     // dbg!(code);
-                            //     // dbg!(MBEDTLS_ERR_X509_UNKNOWN_OID);
-                            //     // dbg!(err_name(code));
-                            //     assert_eq!(code, 0);
-                            // }
-                            // FIXME
-                            // mbedtls_ssl_set_verify(ssl, f_vrfy, p_vrfy)
+                            for ca in ca {
+                                assert_eq!(ca.last(), Some(&0), "ca cert data must ends with zero");
+                                let code = mbedtls_x509_crt_parse(p!(cert), ca.as_ptr(), ca.len());
+                                assert_eq!(code, 0);
+                            }
                             mbedtls_ssl_conf_ca_chain(p!(conf), p!(cert), ptr::null_mut());
                         } else {
                             // no ca specialed, set verify mode to none
@@ -380,8 +360,6 @@ impl<S: Read> Read for TlsStream<S> {
         unsafe {
             let code = mbedtls_ssl_read(&mut self.instance.ssl as _, buf.as_mut_ptr(), buf.len());
             match code {
-                // FIXME
-                // MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY => Err(io::Error::new(io::ErrorKind::Other,"MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY")),
                 0.. => Ok(code as _),
                 _ if self.bio.error.is_err() => Err(self.take_bio_err()),
                 _ => Err(io::Error::new(io::ErrorKind::Other, err_name(code))),
@@ -422,7 +400,7 @@ impl<S: AsyncRead + AsyncWrite> TlsStream<S> {
         let stream = Pin::new_unchecked(&mut bio.stream); // safety: it's sync, called in poll_xxx
         let write_buf = slice::from_raw_parts(buf, len);
         match stream.poll_write(cx, write_buf) {
-            Poll::Pending => MBEDTLS_ERR_SSL_WANT_WRITE,
+            Poll::Pending => MBEDTLS_ERR_SSL_ASYNC_IN_PROGRESS, // FIXME: needs another custom error code
             Poll::Ready(Ok(n)) => n as _,
             Poll::Ready(Err(e)) => {
                 bio.error = Err(e);
@@ -438,7 +416,7 @@ impl<S: AsyncRead + AsyncWrite> TlsStream<S> {
         let stream = Pin::new_unchecked(&mut bio.stream);
         let mut read_buf = ReadBuf::uninit(slice::from_raw_parts_mut(buf as _, len));
         match stream.poll_read(cx, &mut read_buf) {
-            Poll::Pending => MBEDTLS_ERR_SSL_WANT_READ,
+            Poll::Pending => MBEDTLS_ERR_SSL_ASYNC_IN_PROGRESS,
             Poll::Ready(Ok(())) => read_buf.filled().len() as _,
             Poll::Ready(Err(e)) => {
                 bio.error = Err(e);
@@ -467,7 +445,6 @@ impl<S: AsyncRead> AsyncRead for TlsStream<S> {
             bio.context = cx as *mut _ as _; // for the underlying bio_xxx_async
             let code = mbedtls_ssl_read(ssl_p, slice.as_mut_ptr() as _, slice.len());
             bio.context = 0;
-            dbg!(code);
 
             match code {
                 0.. => {
@@ -475,7 +452,10 @@ impl<S: AsyncRead> AsyncRead for TlsStream<S> {
                     buf.advance(code as _);
                     Poll::Ready(Ok(()))
                 }
-                MBEDTLS_ERR_SSL_WANT_READ | MBEDTLS_ERR_SSL_WANT_WRITE => Poll::Pending, // both WANT_READ and WANT_WRITE are possiable in the handshake stage
+                // if WANT_READ is from MbedTLS, call it again, if it's from tokio, return Pending and wait for the next wakeup
+                MBEDTLS_ERR_SSL_WANT_READ | MBEDTLS_ERR_SSL_WANT_WRITE => self.poll_read(cx, buf),
+                MBEDTLS_ERR_SSL_RECEIVED_NEW_SESSION_TICKET => self.poll_read(cx, buf), // skip session ticket
+                MBEDTLS_ERR_SSL_ASYNC_IN_PROGRESS => Poll::Pending, // both WANT_READ and WANT_WRITE are possiable in the handshake stage
                 // MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY => Err(io::Error::new(io::ErrorKind::Other,"MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY")),
                 _ if self.bio.error.is_err() => Poll::Ready(Err(self.take_bio_err())),
                 _ => Poll::Ready(Err(io::Error::new(io::ErrorKind::Other, err_name(code)))),
@@ -491,7 +471,6 @@ impl<S: AsyncWrite> AsyncWrite for TlsStream<S> {
         cx: &mut Context,
         buf: &[u8],
     ) -> Poll<io::Result<usize>> {
-        println!(">>> {}", std::str::from_utf8(buf).unwrap());
         unsafe {
             let ssl_p = &mut self.instance.ssl as *mut _;
 
@@ -499,11 +478,11 @@ impl<S: AsyncWrite> AsyncWrite for TlsStream<S> {
             bio.context = cx as *mut _ as _;
             let code = mbedtls_ssl_write(ssl_p, buf.as_ptr(), buf.len());
             bio.context = 0;
-            dbg!(code, buf.len());
 
             match code {
                 0.. => Poll::Ready(Ok(code as usize)),
-                MBEDTLS_ERR_SSL_WANT_READ | MBEDTLS_ERR_SSL_WANT_WRITE => Poll::Pending,
+                MBEDTLS_ERR_SSL_WANT_READ | MBEDTLS_ERR_SSL_WANT_WRITE => self.poll_write(cx, buf),
+                MBEDTLS_ERR_SSL_ASYNC_IN_PROGRESS => Poll::Pending,
                 _ if self.bio.error.is_err() => Poll::Ready(Err(self.take_bio_err())),
                 _ => Poll::Ready(Err(io::Error::new(io::ErrorKind::Other, err_name(code)))),
             }
@@ -525,44 +504,76 @@ impl<S: AsyncWrite> AsyncWrite for TlsStream<S> {
     }
 }
 
-use http::uri::Scheme;
-use hyper::body::{Body, Incoming};
-use hyper::{Request, Response};
-use hyper_util::rt::tokio::TokioIo;
-use tokio::net::{lookup_host, TcpStream};
+#[cfg(feature = "hyper-client")]
+use {
+    http::uri::Scheme,
+    hyper::body::{Body, Incoming},
+    hyper::{Request, Response},
+    hyper_util::rt::tokio::TokioIo,
+};
 
+#[cfg(feature = "hyper-client")]
+#[derive(Debug)]
+pub enum ClientError {
+    Connect(io::Error),
+    Hyper(hyper::Error),
+}
+
+#[cfg(feature = "hyper-client")]
+impl From<hyper::Error> for ClientError {
+    fn from(value: hyper::Error) -> Self {
+        Self::Hyper(value)
+    }
+}
+
+#[cfg(feature = "hyper-client")]
+impl From<io::Error> for ClientError {
+    fn from(value: io::Error) -> Self {
+        Self::Connect(value)
+    }
+}
+
+#[cfg(feature = "hyper-client")]
+impl std::fmt::Display for ClientError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{self:?}")
+    }
+}
+
+#[cfg(feature = "hyper-client")]
+impl std::error::Error for ClientError {}
+
+#[cfg(feature = "hyper-client")]
 pub struct Client(Arc<TlsConfig>);
 
+#[cfg(feature = "hyper-client")]
 impl Client {
     pub fn default() -> Self {
         // if has_ca {
         //     stream.set_hostname(hostname);
         // }
         // FIXME: verify
-        // std::ascii::escape_default(c)
-        // let mut cas = Vec::new();
-        // cas.push(CC);
-        // Box<'static Trait>
 
         // fn cert_from_anchor(anchor: webpki_roots::TrustAnchor) -> Vec<u8> {}
+        // for v in webpki_roots::TLS_SERVER_ROOTS { }
 
         let mut ca = Vec::new();
-        // for entry in std::fs::read_dir("/etc/ssl/certs").unwrap() {
-        //     let entry = entry.unwrap();
-        //     if !entry.metadata().unwrap().is_file() {
-        //         continue;
-        //     }
-        //     let s = std::fs::read_to_string(entry.path()).unwrap();
-        //     ca.push(s.into_bytes());
-        // }
-        // for v in webpki_roots::TLS_SERVER_ROOTS {
-        // }
-        // let config = TlsConfig::new_client(None);
+        for entry in std::fs::read_dir("/etc/ssl/certs").unwrap() {
+            let entry = entry.unwrap();
+            if !entry.metadata().unwrap().is_file() {
+                continue;
+            }
+            let s = std::fs::read_to_string(entry.path()).unwrap();
+            let mut s = s.into_bytes();
+            s.push(0);
+            ca.push(s);
+        }
         let config = TlsConfig::new_client(Some(ca));
+        // let config = TlsConfig::new_client(None);
         Self(config)
     }
 
-    pub async fn fetch<B>(&self, req: Request<B>) -> Response<Incoming>
+    pub async fn fetch<B>(&self, req: Request<B>) -> Result<Response<Incoming>, ClientError>
     where
         B: Body + 'static + Send,
         B::Data: Send,
@@ -574,41 +585,44 @@ impl Client {
         let mut host_and_port = String::with_capacity(host.len() + 8);
         host_and_port += host;
         host_and_port.push(':');
-        use std::fmt::Write;
-        let port = match uri.port_u16() {
-            Some(port) => port,
-            None if scheme == Some(&Scheme::HTTP) => 80,
-            None if scheme == Some(&Scheme::HTTPS) => 443,
-            None => panic!(),
-        };
-        write!(&mut host_and_port, "{port}");
-        let addr = lookup_host(host_and_port).await.unwrap().next().unwrap();
-        let tcp_stream = TcpStream::connect(addr).await.unwrap();
+        let port = uri.port_u16().unwrap_or(match () {
+            _ if scheme == Some(&Scheme::HTTP) => 80,
+            _ if scheme == Some(&Scheme::HTTPS) => 443,
+            _ => panic!("unsupported scheme"),
+        });
+        {
+            use std::fmt::Write as _;
+            write!(&mut host_and_port, "{port}").unwrap();
+        }
+        let tcp_stream = tokio::net::TcpStream::connect(host_and_port).await?;
 
-        let mut sender = if scheme == Some(&Scheme::HTTP) {
+        if scheme == Some(&Scheme::HTTP) {
             let io = TokioIo::new(tcp_stream);
-            let (sender, conn) = hyper::client::conn::http1::handshake(io).await.unwrap();
+            let (mut sender, conn) = hyper::client::conn::http1::handshake(io).await?; // only http1 currently
             tokio::task::spawn(async move {
                 if let Err(err) = conn.await {
                     println!("Connection failed: {:?}", err);
                 }
             });
-            sender
-        } else if uri.scheme() == Some(&Scheme::HTTPS) {
-            let mut stream = TlsStream::new_async(self.0.clone(), tcp_stream);
-            // stream.set_hostname(host.to_string());
+            return Ok(sender.send_request(req).await?);
+        }
 
-            let io = TokioIo::new(stream);
-            let (sender, conn) = hyper::client::conn::http1::handshake(io).await.unwrap();
+        if uri.scheme() == Some(&Scheme::HTTPS) {
+            let mut tls_stream = TlsStream::new_async(self.0.clone(), tcp_stream);
+            if let Kind::Client { ca: Some(_) } = self.0.kind {
+                tls_stream.set_hostname(host.to_string()); // only host, not port
+            }
+
+            let io = TokioIo::new(tls_stream);
+            let (mut sender, conn) = hyper::client::conn::http1::handshake(io).await?;
             tokio::task::spawn(async move {
                 if let Err(err) = conn.await {
                     println!("Connection failed: {:?}", err);
                 }
             });
-            sender
-        } else {
-            todo!()
-        };
-        sender.send_request(req).await.unwrap()
+            return Ok(sender.send_request(req).await?);
+        }
+
+        unreachable!()
     }
 }

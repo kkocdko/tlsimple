@@ -1,4 +1,5 @@
 #include <arpa/inet.h>
+#include <netdb.h>
 #include <netinet/in.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -31,8 +32,8 @@ int bio_recv(void *ctx, unsigned char *buf, size_t len) {
   return read(fd, (void *)buf, len);
 }
 
-int main() {
-  log(2, "int main");
+void main_server() {
+  log(2, "void main_server()");
   int ret = 0;
 
   // mbedtls_x509_crt_verify();
@@ -71,21 +72,21 @@ int main() {
   // const int ciphersuites[]{MBEDTLS_TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256, 0}; // only one ciphersuite
   // mbedtls_ssl_conf_ciphersuites(&conf, ciphersuites);
 
-  // mbedtls_ssl_conf_max_tls_version(&conf, MBEDTLS_SSL_VERSION_TLS1_3);
-  // mbedtls_ssl_conf_min_tls_version(&conf, MBEDTLS_SSL_VERSION_TLS1_3);
-  // const int ciphersuites[]{MBEDTLS_TLS1_3_AES_128_GCM_SHA256, 0}; // only one ciphersuite
-  // mbedtls_ssl_conf_ciphersuites(&conf, ciphersuites);
+  mbedtls_ssl_conf_max_tls_version(&conf, MBEDTLS_SSL_VERSION_TLS1_3);
+  mbedtls_ssl_conf_min_tls_version(&conf, MBEDTLS_SSL_VERSION_TLS1_3);
+  const int ciphersuites[]{MBEDTLS_TLS1_3_AES_128_GCM_SHA256, 0}; // only one ciphersuite
+  mbedtls_ssl_conf_ciphersuites(&conf, ciphersuites);
 
   ret = mbedtls_ssl_setup(&ssl, &conf);
   h(ret == 0, exit(1), "-0x%x", -ret);
 
   int sockfd = socket(AF_INET, SOCK_STREAM, 0);
   h(sockfd != -1, exit(1), "_");
-  sockaddr_in servAddr{};
-  servAddr.sin_family = AF_INET; // ipv4
-  servAddr.sin_port = htons(SERVER_PORT);
-  servAddr.sin_addr.s_addr = INADDR_ANY; // from anywhere
-  h(bind(sockfd, (sockaddr *)&servAddr, sizeof(servAddr)) != -1, exit(1), "_");
+  sockaddr_in serv_addr{};
+  serv_addr.sin_family = AF_INET; // ipv4
+  serv_addr.sin_port = htons(SERVER_PORT);
+  serv_addr.sin_addr.s_addr = INADDR_ANY; // from anywhere
+  h(bind(sockfd, (sockaddr *)&serv_addr, sizeof(serv_addr)) != -1, exit(1), "_");
   h(listen(sockfd, 5) != -1, exit(1), "_");
 
   while (true) {
@@ -150,5 +151,141 @@ int main() {
   mbedtls_ssl_config_free(&conf);
   mbedtls_ctr_drbg_free(&ctr_drbg);
   mbedtls_entropy_free(&entropy);
+}
+
+void main_client() {
+  log(2, "void main_client()");
+  int ret = 0;
+
+  ret = psa_crypto_init();
+  h(ret == PSA_SUCCESS, exit(1), "-0x%x", -ret);
+
+  mbedtls_entropy_context entropy;
+  mbedtls_entropy_init(&entropy);
+  mbedtls_ctr_drbg_context ctr_drbg;
+  mbedtls_ctr_drbg_init(&ctr_drbg);
+  mbedtls_ssl_config conf;
+  mbedtls_ssl_config_init(&conf);
+  mbedtls_ssl_context ssl;
+  mbedtls_ssl_init(&ssl);
+
+  mbedtls_x509_crt cacert;
+  mbedtls_x509_crt_init(&cacert);
+  ret = mbedtls_x509_crt_parse_path(&cacert, "/etc/ssl/certs/");
+  h(ret == 0, exit(1), "-0x%x", -ret);
+
+  const unsigned char pers[] = "tlsimple";
+  ret = mbedtls_ctr_drbg_seed(&ctr_drbg, mbedtls_entropy_func, &entropy, pers, sizeof(pers));
+  h(ret == 0, exit(1), "-0x%x", -ret);
+
+  mbedtls_ssl_config_defaults(&conf, MBEDTLS_SSL_IS_CLIENT, MBEDTLS_SSL_TRANSPORT_STREAM, MBEDTLS_SSL_PRESET_DEFAULT);
+
+  mbedtls_ssl_conf_rng(&conf, mbedtls_ctr_drbg_random, &ctr_drbg);
+
+  mbedtls_ssl_conf_ca_chain(&conf, &cacert, NULL);
+  mbedtls_ssl_conf_authmode(&conf, MBEDTLS_SSL_VERIFY_REQUIRED);
+
+  // mbedtls_ssl_conf_early_data(&conf, MBEDTLS_SSL_EARLY_DATA_ENABLED);
+
+  ret = mbedtls_ssl_setup(&ssl, &conf);
+  h(ret == 0, exit(1), "-0x%x", -ret);
+
+  // const unsigned char url[] = "https://archlinux.org/packages/extra/x86_64/rust/json/";
+
+  int sockfd = socket(AF_INET, SOCK_STREAM, 0);
+  struct sockaddr_in serv_addr = {};
+  serv_addr.sin_family = AF_INET;
+  struct hostent *server = gethostbyname("archlinux.org");
+  bcopy((char *)server->h_addr, (char *)&serv_addr.sin_addr.s_addr, server->h_length);
+  serv_addr.sin_port = htons(443);
+
+  ret = connect(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr));
+  h(ret == 0, exit(1), "%d", ret);
+
+  unsigned char buf[32768]{};
+
+  // mbedtls_ssl_session_reset(&ssl); // reusing, unlike openssl
+  mbedtls_ssl_set_bio(&ssl, &sockfd, bio_send, bio_recv, NULL);
+
+  // mbedtls_ssl_set_hostname(&ssl, "archlinux.org");
+
+  // ret = mbedtls_ssl_handshake(&ssl);
+  // h(ret == 0, exit(1), "-0x%x", -ret);
+
+  // write http request
+  *buf = {};
+  strcat((char *)buf, "GET https://archlinux.org/packages/extra/x86_64/rust/json/ HTTP/1.1\r\nhost: archlinux.org\r\n\r\n");
+  int buf_len = strlen((char *)buf);
+  while (ret != buf_len) {
+    ret = mbedtls_ssl_write(&ssl, buf + ret, buf_len - ret);
+    h(ret >= 0, exit(1), "-0x%x", -ret);
+    log(2, "%d bytes written", ret);
+  };
+
+  // read http response
+  *buf = {};
+  buf_len = 0;
+  while (true) {
+    ret = mbedtls_ssl_read(&ssl, buf + buf_len, sizeof(buf) - 1 - buf_len); // do not missing '\0' at the end
+    if (ret > 0) {
+      buf_len += ret;
+      break;
+    }
+    if (ret == MBEDTLS_ERR_SSL_WANT_READ) {
+      log(2, "MBEDTLS_ERR_SSL_WANT_READ");
+      continue;
+    }
+    if (ret == MBEDTLS_ERR_SSL_WANT_WRITE) {
+      log(2, "MBEDTLS_ERR_SSL_WANT_WRITE");
+      continue;
+    }
+    if (ret == MBEDTLS_ERR_SSL_CRYPTO_IN_PROGRESS) {
+      log(2, "MBEDTLS_ERR_SSL_CRYPTO_IN_PROGRESS");
+      continue;
+    }
+    if (ret == MBEDTLS_ERR_SSL_RECEIVED_NEW_SESSION_TICKET) {
+      log(2, "MBEDTLS_ERR_SSL_RECEIVED_NEW_SESSION_TICKET");
+      continue;
+    }
+    // if (ret == MBEDTLS_ERR_SSL_WANT_READ || ret == MBEDTLS_ERR_SSL_WANT_WRITE || ret == MBEDTLS_ERR_SSL_CRYPTO_IN_PROGRESS ||
+    //     ret == MBEDTLS_ERR_SSL_RECEIVED_NEW_SESSION_TICKET)
+    //   continue;
+    if (ret == MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY) {
+      log(2, "connection was closed gracefully");
+      break;
+    }
+    if (ret == 0) {
+      break;
+    }
+    h(ret >= 0, exit(1), "-0x%x", -ret);
+  }
+  log(2, "%d bytes read\n-----\n%s-----", ret, buf);
+
+  // sleep(9999);
+
+  // shutdown
+  do {
+    ret = mbedtls_ssl_close_notify(&ssl); // maybe like shutdown() in Rust?
+    if (ret < 0) {
+      log(1, "-0x%x", -ret);
+      break;
+    }
+  } while (0);
+
+  close(sockfd);
+
+  mbedtls_x509_crt_free(&cacert);
+  mbedtls_ssl_free(&ssl);
+  mbedtls_ssl_config_free(&conf);
+  mbedtls_ctr_drbg_free(&ctr_drbg);
+  mbedtls_entropy_free(&entropy);
+}
+
+int main() {
+  // main_server();
+  main_client();
   return 0;
 }
+
+// ./ssl_client2 server_name=archlinux.org server_port=443 request_page=/packages/extra/x86_64/rust/json/ ca_path=/etc/ssl/certs/
+// force_version=tls13

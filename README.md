@@ -1,6 +1,6 @@
 # tlsimple
 
-Simple & tiny TLS support for Rust, using [Mbed-TLS](https://github.com/Mbed-TLS/mbedtls).
+TLS for async Rust, with [Mbed-TLS](https://github.com/Mbed-TLS/mbedtls).
 
 ## Features
 
@@ -33,13 +33,14 @@ WIP
 - [x] Implement Client mode cert vetify.
 - [ ] Test client mode cert vetify works.
 - [x] Client with Hyper 0.14.
-- [ ] Client with Hyper 1.0 rc.
+- [x] Client with Hyper 1.0.
 - [x] Deploy on Tokio current-thread runtime.
 - [x] Fix crach on Tokio multi-thread runtime.
 - [x] Bench OpenSSL and Mbed-TLS.
 - [x] Strip more.
 - [x] Test if works in Windows.
-- [ ] TLS 1.3.
+- [x] TLS 1.3 in C.
+- [x] TLS 1.3 in Rust.
 - [ ] ~~Use mbedtls_ssl_cache_context to speed up.~~
 - [x] Use context pool to improve performance.
 - [x] Improve multi-thread performance.

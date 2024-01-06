@@ -40,6 +40,7 @@ if [ "$1" = "run-cpp" ]; then
     ar r libmbedtlsmono.a *.o
     rm -rf *.o
   fi
+  rm main
   mold -run \
   g++ ../examples/main.cc -o main -I../3rdparty/mbedtls/include -L. -lmbedtlsmono $ccflags
   # strip --strip-all main
