@@ -14,9 +14,8 @@ if [ "$1" = "init" ]; then
   cd mbedtls
   python -m venv venv
   source venv/bin/activate
-  unset all_proxy ALL_PROXY
-  pip install 'jinja2 == 2.10.1' 'markupsafe < 2.1' 'jsonschema == 4.20.0'
-  sed -i venv/lib64/python3.*/site-packages/jinja2/tests.py -e 's|from collections import Mapping|from collections.abc import Mapping|' # patch it to supports newer python version (up to 3.12)
+  unset all_proxy ALL_PROXY # pip have not socks support by default, unset these to use transparent proxy instead
+  pip install jinja2==3.1.2 jsonschema==4.20.0
   mkdir programs tests # to fit the detection in ./scripts/mbedtls_dev/build_tree.py
   ./scripts/generate_ssl_debug_helpers.py
   ./scripts/generate_driver_wrappers.py
@@ -31,7 +30,7 @@ if [ "$1" = "run-cpp" ]; then
   cd target
   ccflags='-Wall -Wextra -g -fno-omit-frame-pointer -fsanitize=address,undefined'
   # ccflags='-flto=auto -Os'
-  rm libmbedtlsmono.a
+  rm -f libmbedtlsmono.a
   if [ ! -e libmbedtlsmono.a ]; then
     # for n in $(find ../3rdparty/mbedtls/library -name '*.c' | grep -Ev 'net_sockets|mps_|psa_'); do
     for n in $(find ../3rdparty/mbedtls/library -name '*.c'); do
